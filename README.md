@@ -4,6 +4,14 @@ A single-page app that listens to the microphone, transcribes speech **entirely
 in the browser** with the [Moonshine](https://github.com/moonshine-ai/moonshine)
 WASM model, and streams the text over a WebSocket as it is produced.
 
+## License
+
+This project's own code is licensed under the [MIT License](LICENSE). The
+vendored Moonshine WASM binding and the streaming speech models are MIT-licensed
+by Useful Sensors, Inc. (dba Moonshine AI) — the full Moonshine repository
+license is reproduced in `public/models/LICENSE.moonshine` and summarized in
+our [LICENSE](LICENSE).
+
 Everything required to run — the Moonshine WASM binding and all model files —
 is served locally. The app works with no connection to the internet (only the
 WebSocket relay you point it at needs to be reachable).
@@ -69,7 +77,8 @@ as the Moonshine examples' `serve.mjs`).
 - `public/wasm/dist/` — the Moonshine WASM binding (JS + `moonshine.wasm`),
   copied from the installed `@moonshine-ai/moonshine-wasm` npm package and
   imported at runtime from `/wasm/dist/index.js`. The npm package itself is
-  used only for TypeScript declarations at build time.
+  used only for TypeScript declarations at build time. The Moonshine license
+  ships alongside it (`public/wasm/dist/LICENSE.moonshine`).
 - `public/models/<arch>_streaming/` — the three streaming models (tiny, small,
   medium), each with the canonical files the binding expects
   (`frontend.ort`, `encoder.ort`, `adapter.ort`, `cross_kv.ort`,
