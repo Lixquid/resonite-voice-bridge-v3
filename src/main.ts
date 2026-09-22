@@ -8,8 +8,18 @@ import {
 
 const DEFAULT_WS_URL = 'ws://localhost:9999';
 const QUEUE_LIMIT = 500;
+/** Maximum rows kept in the on-page frame log. */
+const FRAME_LOG_LIMIT = 500;
 /** How often to retry the relay while it is down and the user wants it. */
 const RECONNECT_INTERVAL_MS = 10_000;
+/** Text frame sent when the model detects the end of speech, if enabled. */
+const SPEECH_ENDED_FRAME = '[speechEnded]';
+/** Persisted flag: send {@link SPEECH_ENDED_FRAME} on pause? Default on. */
+const SPEECH_ENDED_KEY = 'sendSpeechEnded';
+/** Persisted flag: lowercase + strip non-alphanumerics from sent frames. */
+const SANITIZE_KEY = 'sanitizeFrames';
+/** Persisted key of the last used model size ({@link ArchKey}). */
+const MODEL_KEY = 'modelArch';
 
 const els = {
   wsDot: document.getElementById('wsDot') as HTMLSpanElement,
@@ -17,6 +27,8 @@ const els = {
   wsToggle: document.getElementById('wsToggle') as HTMLButtonElement,
   wsStatus: document.getElementById('wsStatus') as HTMLParagraphElement,
   mic: document.getElementById('mic') as HTMLButtonElement,
+  speechEnded: document.getElementById('speechEnded') as HTMLInputElement,
+  sanitize: document.getElementById('sanitize') as HTMLInputElement,
   micLabel: document.getElementById('micLabel') as HTMLElement,
   sttStatus: document.getElementById('sttStatus') as HTMLParagraphElement,
   progress: document.getElementById('progress') as HTMLElement,
@@ -107,11 +119,29 @@ function logFrame(kind: FrameKind, text: string): void {
   time.textContent = new Date().toLocaleTimeString([], { hour12: false });
   const msg = document.createElement('span');
   msg.className = 'msg';
-  msg.textContent = kind === 'pause' ? '⏸ pause' : text;
+  msg.textContent = kind === 'pause' ? '⏸ pause (not sent)' : text;
   row.append(time, msg);
   els.frames.append(row);
-  while (els.frames.childElementCount > 300) els.frames.firstElementChild?.remove();
+  while (els.frames.childElementCount > FRAME_LOG_LIMIT) els.frames.firstElementChild?.remove();
   els.frames.scrollTop = els.frames.scrollHeight;
+}
+
+/**
+ * Prepares transcribed text for the wire: when the sanitize option is on,
+ * lowercases it, removes every non-alphanumeric character, and keeps spaces
+ * as the only whitespace — other whitespace (tabs, newlines) is dropped, and
+ * runs of spaces collapse to one with none at the edges. Unicode-aware, so
+ * accented letters and digits survive. The `[speechEnded]` control frame is
+ * exempt — stripping its punctuation would destroy the marker.
+ */
+function sanitizeForWire(text: string, kind: FrameKind): string {
+  if (kind === 'final' && text === SPEECH_ENDED_FRAME) return text;
+  if (!els.sanitize.checked) return text;
+  return text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N} ]+/gu, '')
+    .replace(/ {2,}/g, ' ')
+    .trim();
 }
 
 function logSeparator(): void {
@@ -126,11 +156,12 @@ function mayReconnect(): boolean {
 }
 
 /**
- * Sends one text frame to the WebSocket server. Queues while the socket is
- * down (and asks for a reconnect), so transcription never stalls on the
- * connection.
+ * Sends one text frame to the WebSocket server, sanitized per the toggle.
+ * Queues while the socket is down (and asks for a reconnect), so
+ * transcription never stalls on the connection.
  */
-function sendFrame(kind: FrameKind, text: string): void {
+function sendFrame(kind: FrameKind, rawText: string): void {
+  const text = sanitizeForWire(rawText, kind);
   if (!text) return;
   if (kind === 'sys') {
     // Local diagnostics only — never queued or sent.
@@ -161,6 +192,17 @@ const ARCHES: { key: ArchKey; name: string; label: string }[] = [
 
 let Moonshine: MoonshineModule;
 let selectedArch: ArchKey = 'small';
+
+/** Reads the persisted model size, falling back to 'small' if unknown. */
+function loadArchPreference(): ArchKey {
+  try {
+    const saved = localStorage.getItem(MODEL_KEY) as ArchKey | null;
+    if (saved && ARCHES.some((a) => a.key === saved)) return saved;
+  } catch {
+    // Private mode or storage disabled: the default (small) simply applies.
+  }
+  return 'small';
+}
 let mic: MicTranscriber | null = null;
 let micReady: Promise<void> | null = null;
 let loadGeneration = 0;
@@ -193,23 +235,32 @@ function setProgress(fraction: number | null): void {
 function onPartial(text: string): void {
   els.live.textContent = text;
   const trimmed = text.trim();
-  if (trimmed && trimmed !== lastSent) {
-    lastSent = trimmed;
+  if (!trimmed) return;
+  // Deduplicate on what actually goes on the wire, so "Hello," followed by
+  // "Hello" does not send the sanitized "hello" twice.
+  const wire = sanitizeForWire(trimmed, 'partial');
+  if (wire && wire !== lastSent) {
+    lastSent = wire;
     sendFrame('partial', trimmed);
   }
 }
 
 /**
  * Called once per finished line — when the model detects speech has stopped.
- * Sends the final sentence, notes the end of speech in the log (nothing is
- * sent for it), and resets so the next phrase starts from fresh.
+ * Sends the final sentence, optionally the `[speechEnded]` marker frame, and
+ * resets so the next phrase starts from fresh. The pause row in the log notes
+ * whether the marker was sent or suppressed.
  */
 function onLine(line: TranscriptLine): void {
   els.live.textContent = '';
   lastSent = '';
   const text = line.text.trim();
   if (text) sendFrame('final', text);
-  logFrame('pause', '');
+  if (els.speechEnded.checked) {
+    sendFrame('final', SPEECH_ENDED_FRAME);
+  } else {
+    logFrame('pause', '');
+  }
   logSeparator();
 }
 
@@ -258,7 +309,7 @@ async function startListening(): Promise<void> {
     document.body.dataset.state = 'listening';
     els.mic.setAttribute('aria-label', 'Stop listening');
     els.micLabel.textContent = 'Listening';
-    sttStatus('Transcribing — speak freely; frames stream as each sentence grows.', 'ready');
+    sttStatus('Transcribing', 'ready');
   } catch (err) {
     els.micLabel.textContent = 'Start listening';
     sttStatus((err as Error).message, 'error');
@@ -289,6 +340,11 @@ els.mic.addEventListener('click', () => {
 async function selectArch(key: ArchKey): Promise<void> {
   if (key === selectedArch) return;
   selectedArch = key;
+  try {
+    localStorage.setItem(MODEL_KEY, key);
+  } catch {
+    // Nothing to do — the selection still applies for this session.
+  }
   for (const chip of els.archChips.children) {
     chip.classList.toggle('is-active', (chip as HTMLElement).dataset.arch === key);
   }
@@ -309,6 +365,40 @@ function mountArchChips(): void {
     els.archChips.append(chip);
   }
 }
+
+// --- Settings ----------------------------------------------------------------------
+
+// Restores the persisted `[speechEnded]` preference (default: on).
+try {
+  const saved = localStorage.getItem(SPEECH_ENDED_KEY);
+  if (saved !== null) els.speechEnded.checked = saved === 'true';
+} catch {
+  // Private mode or storage disabled: the default (on) simply applies.
+}
+
+els.speechEnded.addEventListener('change', () => {
+  try {
+    localStorage.setItem(SPEECH_ENDED_KEY, String(els.speechEnded.checked));
+  } catch {
+    // Nothing to do — the toggle still applies for this session.
+  }
+});
+
+// Restores the persisted sanitize preference (default: off).
+try {
+  const saved = localStorage.getItem(SANITIZE_KEY);
+  if (saved !== null) els.sanitize.checked = saved === 'true';
+} catch {
+  // Private mode or storage disabled: the default (off) simply applies.
+}
+
+els.sanitize.addEventListener('change', () => {
+  try {
+    localStorage.setItem(SANITIZE_KEY, String(els.sanitize.checked));
+  } catch {
+    // Nothing to do — the toggle still applies for this session.
+  }
+});
 
 // --- WebSocket controls ----------------------------------------------------------
 
@@ -336,6 +426,7 @@ void (async () => {
     console.info(`Loading Moonshine binding from ${moduleUrl()}`);
   }
   Moonshine = await loadMoonshine();
+  selectedArch = loadArchPreference();
   mountArchChips();
   warmStart();
   connect(); // first relay attempt; retries every 10 s until stopped

@@ -151,6 +151,32 @@
         background: var(--bad);
       }
 
+      /* --- Settings ---------------------------------------------------------- */
+
+      .opt {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        margin-top: 0.85rem;
+        font-size: 0.9rem;
+        color: var(--muted);
+        cursor: pointer;
+        user-select: none;
+        width: fit-content;
+      }
+
+      .opt input {
+        width: 1.05rem;
+        height: 1.05rem;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+
+      .opt code {
+        font: 0.85em var(--mono);
+        color: var(--warn);
+      }
+
       @keyframes blink {
         50% {
           opacity: 0.3;
@@ -247,6 +273,11 @@
         color: var(--good);
       }
 
+      /* A status line with nothing to say takes no space. */
+      .status:empty {
+        display: none;
+      }
+
       /* --- Progress --------------------------------------------------------- */
 
       .progress {
@@ -322,14 +353,17 @@
         margin-top: 0.9rem;
         padding: 0.8rem 1rem;
         min-height: 2.4rem;
-        border: 1px dashed var(--line);
+        border: 1px solid var(--line);
         border-radius: 8px;
+        background: rgba(0, 0, 0, 0.45);
         font-size: 1.02rem;
-        color: var(--muted);
+        color: var(--text);
       }
 
-      .live:not(:empty) {
-        color: var(--text);
+      /* Greyed-out label while nothing is being spoken. */
+      .live:empty::before {
+        content: "Live output";
+        color: var(--faint);
       }
 
       .frames {
@@ -408,7 +442,15 @@
           />
           <button id="wsToggle" class="btn" type="button">Connect</button>
         </div>
-        <p class="status" id="wsStatus">Disconnected.</p>
+        <label class="opt">
+          <input type="checkbox" id="speechEnded" checked />
+          <span>Send <code>[speechEnded]</code> when speech ends</span>
+        </label>
+        <label class="opt">
+          <input type="checkbox" id="sanitize" />
+          <span>Lowercase and strip non-alphanumerics (spaces kept) from sent frames</span>
+        </label>
+        <p class="status" id="wsStatus"></p>
       </section>
 
       <section>

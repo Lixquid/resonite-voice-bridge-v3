@@ -25,8 +25,17 @@ Are you well?
 - Partials come from `MicTranscriber.onText` (deduplicated — a frame is only
   sent when the sentence actually grows).
 - The final frame comes from `MicTranscriber.onLine`, which fires when the
-  model detects the speaker has stopped. The end of speech is noted in the UI
-  log only — nothing is sent for it.
+  model detects the speaker has stopped. A `[speechEnded]` frame is sent after
+  it by default; the toggle in the WebSocket section (persisted in
+  `localStorage`) turns that off, in which case the pause is only noted in the
+  UI log.
+- A second toggle (persisted, default off) lowercases sent frames and strips
+  all non-alphanumeric characters, keeping spaces as the only whitespace
+  (`Hello, how are you?` → `hello how are you`; tabs and newlines are removed,
+  space runs collapse to one). It is unicode-aware, so accented letters and
+  digits survive, and it never mangles the `[speechEnded]` control frame.
+  Partial-frame deduplication compares sanitized values, so `Hello,` followed
+  by `Hello` sends once.
 - The WebSocket defaults to `ws://localhost:9999` (editable in the UI). Frames
   are queued while the socket is down and flushed once it connects, so
   transcription never stalls on the connection.
@@ -54,8 +63,9 @@ as the Moonshine examples' `serve.mjs`).
 ## Options
 
 - **Model size** — Tiny / Small / Medium streaming models (Small is the
-  default). Models are downloaded once from the Moonshine CDN and cached in
-  Cache Storage.
+  default). The choice is persisted in `localStorage` and restored on the next
+  visit. Models are downloaded once from the Moonshine CDN and cached in Cache
+  Storage.
 - **WebSocket URL** — type a new URL and press Enter (or Connect).
 - `?local=1` — load the binding from `/wasm/dist` instead of the jsDelivr CDN
   (for a locally built `@moonshine-ai/moonshine-wasm`).
