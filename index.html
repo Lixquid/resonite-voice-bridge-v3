@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Moonshine → WebSocket Transcriber</title>
+    <meta
+      name="description"
+      content="Live microphone transcription running entirely in the browser via the Moonshine WASM model, streamed over a WebSocket."
+    />
+    <style>
+      :root {
+        --bg: #0b0d10;
+        --panel: rgba(255, 255, 255, 0.04);
+        --panel-strong: rgba(9, 11, 15, 0.6);
+        --line: rgba(255, 255, 255, 0.1);
+        --line-strong: rgba(255, 255, 255, 0.22);
+        --text: #eef1f6;
+        --muted: #9aa3b2;
+        --faint: #6b7482;
+        --accent: #6ea8fe;
+        --good: #3ddc97;
+        --warn: #ffb454;
+        --bad: #ff6b6b;
+        --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        --radius: 12px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        padding: 2rem 1rem 4rem;
+        background: var(--bg);
+        color: var(--text);
+        font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+
+      main {
+        max-width: 46rem;
+        margin: 0 auto;
+        display: grid;
+        gap: 1.25rem;
+      }
+
+      header h1 {
+        margin: 0 0 0.35rem;
+        font-size: clamp(1.5rem, 4vw, 2rem);
+        letter-spacing: -0.02em;
+      }
+
+      header p {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      section {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel);
+        padding: 1.1rem 1.25rem;
+      }
+
+      h2 {
+        margin: 0 0 0.75rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--faint);
+      }
+
+      /* --- Connection row --------------------------------------------------- */
+
+      .conn {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        flex-wrap: wrap;
+      }
+
+      .conn input {
+        flex: 1;
+        min-width: 16rem;
+        padding: 0.55rem 0.75rem;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel-strong);
+        color: var(--text);
+        font: 0.9rem var(--mono);
+      }
+
+      .conn input:focus {
+        outline: none;
+        border-color: var(--accent);
+      }
+
+      button {
+        font: inherit;
+        color: var(--text);
+        cursor: pointer;
+      }
+
+      .btn {
+        padding: 0.55rem 1rem;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        transition: background 120ms ease, border-color 120ms ease;
+      }
+
+      .btn:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: var(--line-strong);
+      }
+
+      .btn:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+
+      .btn--accent {
+        border-color: rgba(110, 168, 254, 0.5);
+        background: rgba(110, 168, 254, 0.12);
+      }
+
+      /* --- Status dots ------------------------------------------------------ */
+
+      .dot {
+        display: inline-block;
+        width: 0.55rem;
+        height: 0.55rem;
+        border-radius: 50%;
+        background: var(--faint);
+        flex: none;
+      }
+
+      .dot--connecting {
+        background: var(--warn);
+        animation: blink 1s ease infinite;
+      }
+
+      .dot--open {
+        background: var(--good);
+      }
+
+      .dot--error {
+        background: var(--bad);
+      }
+
+      @keyframes blink {
+        50% {
+          opacity: 0.3;
+        }
+      }
+
+      /* --- Mic row ---------------------------------------------------------- */
+
+      .mic-row {
+        display: flex;
+        align-items: center;
+        gap: 1.1rem;
+      }
+
+      .mic {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 4.25rem;
+        height: 4.25rem;
+        flex: none;
+        padding: 0;
+        border: 1px solid rgba(110, 168, 254, 0.45);
+        border-radius: 50%;
+        background: rgba(110, 168, 254, 0.1);
+        color: var(--text);
+        transition: background 140ms ease, border-color 140ms ease;
+      }
+
+      .mic:hover:not(:disabled) {
+        border-color: rgba(110, 168, 254, 0.75);
+        background: rgba(110, 168, 254, 0.2);
+      }
+
+      .mic:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+
+      .mic svg {
+        width: 1.7rem;
+        height: 1.7rem;
+      }
+
+      .mic__stop {
+        display: none;
+      }
+
+      body[data-state="listening"] .mic {
+        border-color: transparent;
+        color: #0d1017;
+        background: linear-gradient(135deg, #6ea8fe, #3ddc97);
+        animation: pulse 2s ease-out infinite;
+      }
+
+      body[data-state="listening"] .mic__mic {
+        display: none;
+      }
+
+      body[data-state="listening"] .mic__stop {
+        display: block;
+      }
+
+      @keyframes pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(110, 168, 254, 0.45);
+        }
+        70%,
+        100% {
+          box-shadow: 0 0 0 14px rgba(110, 168, 254, 0);
+        }
+      }
+
+      .mic-meta {
+        min-width: 0;
+      }
+
+      .mic-meta .label {
+        font-size: 1.05rem;
+        font-weight: 600;
+      }
+
+      .status {
+        margin: 0.15rem 0 0;
+        font-size: 0.88rem;
+        color: var(--muted);
+      }
+
+      .status[data-kind="error"] {
+        color: var(--bad);
+      }
+
+      .status[data-kind="ready"] {
+        color: var(--good);
+      }
+
+      /* --- Progress --------------------------------------------------------- */
+
+      .progress {
+        height: 4px;
+        margin-top: 0.9rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        overflow: hidden;
+        opacity: 0;
+        transition: opacity 200ms ease;
+      }
+
+      .progress.is-active {
+        opacity: 1;
+      }
+
+      .progress__bar {
+        height: 100%;
+        width: 0%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #6ea8fe, #3ddc97);
+        transition: width 200ms ease;
+      }
+
+      .progress.is-indeterminate .progress__bar {
+        width: 40%;
+        animation: slide 1.2s ease-in-out infinite;
+      }
+
+      @keyframes slide {
+        0% {
+          margin-left: -40%;
+        }
+        100% {
+          margin-left: 100%;
+        }
+      }
+
+      /* --- Model chips ------------------------------------------------------ */
+
+      .chips {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-top: 1rem;
+      }
+
+      .chip {
+        padding: 0.35rem 0.8rem;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: transparent;
+        color: var(--muted);
+        font-size: 0.85rem;
+        transition: all 120ms ease;
+      }
+
+      .chip:hover {
+        color: var(--text);
+        border-color: var(--line-strong);
+      }
+
+      .chip.is-active {
+        color: #0d1017;
+        border-color: transparent;
+        background: var(--accent);
+        font-weight: 600;
+      }
+
+      /* --- Live transcript + frame log -------------------------------------- */
+
+      .live {
+        margin-top: 0.9rem;
+        padding: 0.8rem 1rem;
+        min-height: 2.4rem;
+        border: 1px dashed var(--line);
+        border-radius: 8px;
+        font-size: 1.02rem;
+        color: var(--muted);
+      }
+
+      .live:not(:empty) {
+        color: var(--text);
+      }
+
+      .frames {
+        margin-top: 0.75rem;
+        max-height: 18rem;
+        overflow-y: auto;
+        font: 0.85rem var(--mono);
+        display: grid;
+        gap: 0.15rem;
+      }
+
+      .frames:empty::after {
+        content: "Sent WebSocket frames will appear here.";
+        color: var(--faint);
+        font-family: system-ui;
+      }
+
+      .frame {
+        display: flex;
+        gap: 0.6rem;
+        padding: 0.1rem 0.2rem;
+        border-radius: 4px;
+      }
+
+      .frame time {
+        color: var(--faint);
+        flex: none;
+      }
+
+      .frame--partial .msg {
+        color: var(--muted);
+      }
+
+      .frame--final .msg {
+        color: var(--good);
+        font-weight: 600;
+      }
+
+      .frame--pause .msg {
+        color: var(--warn);
+      }
+
+      .frame--sys .msg {
+        color: var(--faint);
+        font-style: italic;
+      }
+
+      .frames .sep {
+        border-top: 1px solid var(--line);
+        margin: 0.35rem 0;
+      }
+    </style>
+  </head>
+  <body data-state="idle">
+    <main>
+      <header>
+        <h1>Moonshine → WebSocket Transcriber</h1>
+        <p>
+          Live speech-to-text with the Moonshine model, running entirely in this
+          browser. In-progress sentences stream over the WebSocket as they grow;
+          when speech stops, a final frame is sent followed by
+          <code>pause</code>, and transcription starts fresh.
+        </p>
+      </header>
+
+      <section>
+        <h2>WebSocket connection</h2>
+        <div class="conn">
+          <span class="dot" id="wsDot"></span>
+          <input
+            id="wsUrl"
+            type="text"
+            spellcheck="false"
+            value="ws://localhost:9999"
+            aria-label="WebSocket URL"
+          />
+          <button id="wsToggle" class="btn" type="button">Connect</button>
+        </div>
+        <p class="status" id="wsStatus">Disconnected.</p>
+      </section>
+
+      <section>
+        <h2>Microphone</h2>
+        <div class="mic-row">
+          <button id="mic" class="mic" type="button" disabled aria-label="Start listening">
+            <svg class="mic__mic" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" />
+              <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+            </svg>
+            <svg class="mic__stop" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <rect x="6" y="6" width="12" height="12" rx="2" />
+            </svg>
+          </button>
+          <div class="mic-meta">
+            <div class="label" id="micLabel">Loading model…</div>
+            <p class="status" id="sttStatus">Fetching the speech model…</p>
+          </div>
+        </div>
+        <div class="progress" id="progress"><div class="progress__bar"></div></div>
+        <div class="chips" id="archChips" role="group" aria-label="Model size"></div>
+        <div class="live" id="live" aria-live="polite"></div>
+      </section>
+
+      <section>
+        <h2>Sent frames</h2>
+        <div class="frames" id="frames"></div>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
