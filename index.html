@@ -73,6 +73,28 @@
         color: var(--faint);
       }
 
+      /* Connection state appended to a section heading, e.g.
+         "WEBSOCKET CONNECTION — CONNECTED", colored by state. */
+      .ws-state {
+        font-weight: 500;
+      }
+
+      .ws-state--open {
+        color: var(--good);
+      }
+
+      .ws-state--connecting {
+        color: var(--warn);
+      }
+
+      .ws-state--closed {
+        color: var(--faint);
+      }
+
+      .ws-state--error {
+        color: var(--bad);
+      }
+
       /* --- Connection row --------------------------------------------------- */
 
       .conn {
@@ -273,10 +295,7 @@
         color: var(--good);
       }
 
-      /* A status line with nothing to say takes no space. */
-      .status:empty {
-        display: none;
-      }
+
 
       /* --- Progress --------------------------------------------------------- */
 
@@ -430,7 +449,10 @@
       </header>
 
       <section>
-        <h2>WebSocket connection</h2>
+        <h2>
+          WebSocket connection
+          <span class="ws-state ws-state--closed" id="wsState">— disconnected</span>
+        </h2>
         <div class="conn">
           <span class="dot" id="wsDot"></span>
           <input
@@ -450,7 +472,6 @@
           <input type="checkbox" id="sanitize" />
           <span>Lowercase and strip non-alphanumerics (spaces kept) from sent frames</span>
         </label>
-        <p class="status" id="wsStatus"></p>
       </section>
 
       <section>

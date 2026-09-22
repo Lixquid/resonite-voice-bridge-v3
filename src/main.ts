@@ -25,8 +25,8 @@ const els = {
   wsDot: document.getElementById('wsDot') as HTMLSpanElement,
   wsUrl: document.getElementById('wsUrl') as HTMLInputElement,
   wsToggle: document.getElementById('wsToggle') as HTMLButtonElement,
-  wsStatus: document.getElementById('wsStatus') as HTMLParagraphElement,
   mic: document.getElementById('mic') as HTMLButtonElement,
+  wsState: document.getElementById('wsState') as HTMLElement,
   speechEnded: document.getElementById('speechEnded') as HTMLInputElement,
   sanitize: document.getElementById('sanitize') as HTMLInputElement,
   micLabel: document.getElementById('micLabel') as HTMLElement,
@@ -57,11 +57,31 @@ function setWsState(state: WsState): void {
   }`;
   els.wsToggle.textContent =
     state === 'open' ? 'Disconnect' : state === 'connecting' ? 'Cancel' : 'Connect';
+  // Heading suffix, e.g. "WEBSOCKET CONNECTION — CONNECTED", colored by state.
+  els.wsState.className = `ws-state ws-state--${state}`;
+  els.wsState.textContent =
+    state === 'open'
+      ? '— connected'
+      : state === 'connecting'
+        ? '— connecting…'
+        : '— disconnected';
 }
 
-function wsStatus(text: string, kind?: 'error'): void {
-  els.wsStatus.textContent = text;
-  els.wsStatus.dataset.kind = kind ?? '';
+/** The URL text box, or the default when blank. */
+function currentWsUrl(): string {
+  return els.wsUrl.value.trim() || DEFAULT_WS_URL;
+}
+
+/** True when the last connect attempt failed or the socket dropped on its own. */
+function hadError(): boolean {
+  return wsState === 'closed' && !userStopped;
+}
+
+/** Renders the "— disconnected" suffix in the error color after a failure. */
+function markWsError(): void {
+  if (!hadError()) return;
+  els.wsState.className = 'ws-state ws-state--error';
+  els.wsState.textContent = '— retrying every 10 s';
 }
 
 function connect(): void {
@@ -70,33 +90,28 @@ function connect(): void {
     return;
   }
   userStopped = false;
-  const url = els.wsUrl.value.trim() || DEFAULT_WS_URL;
+  const url = currentWsUrl();
   setWsState('connecting');
-  wsStatus(`Connecting to ${url}…`);
   try {
     ws = new WebSocket(url);
   } catch (err) {
     setWsState('closed');
-    wsStatus(`Invalid WebSocket URL: ${(err as Error).message}`, 'error');
+    markWsError();
+    console.error(`Invalid WebSocket URL: ${(err as Error).message}`);
     return;
   }
   ws.onopen = () => {
     setWsState('open');
     wasConnected = true;
-    wsStatus(`Connected to ${url}.`);
     flushPending();
   };
   ws.onerror = () => {
-    if (wsState === 'connecting') wsStatus(`Could not connect to ${url}.`, 'error');
+    // onclose always follows; the closed-state render handles the message.
   };
   ws.onclose = () => {
     ws = null;
     setWsState('closed');
-    if (userStopped) {
-      if (wasConnected) wsStatus('Disconnected.');
-    } else {
-      wsStatus('Relay down — retrying every 10 seconds…', 'error');
-    }
+    markWsError();
   };
 }
 
