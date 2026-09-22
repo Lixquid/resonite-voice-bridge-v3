@@ -4,11 +4,15 @@ A single-page app that listens to the microphone, transcribes speech **entirely
 in the browser** with the [Moonshine](https://github.com/moonshine-ai/moonshine)
 WASM model, and streams the text over a WebSocket as it is produced.
 
+Everything required to run — the Moonshine WASM binding and all model files —
+is served locally. The app works with no connection to the internet (only the
+WebSocket relay you point it at needs to be reachable).
+
 ## Behavior
 
 For each phrase the model hears, the app sends continually expanding text
 frames until the model detects the end of speech, then sends the final
-sentence, a `pause` marker, and starts fresh on the next phrase:
+sentence and starts fresh on the next phrase:
 
 ```
 Hello
@@ -60,21 +64,40 @@ The threaded WASM build needs `SharedArrayBuffer`, so the dev server sets
 `Cross-Origin-Embedder-Policy: require-corp` on every response (same approach
 as the Moonshine examples' `serve.mjs`).
 
+## Local assets (offline support)
+
+- `public/wasm/dist/` — the Moonshine WASM binding (JS + `moonshine.wasm`),
+  copied from the installed `@moonshine-ai/moonshine-wasm` npm package and
+  imported at runtime from `/wasm/dist/index.js`. The npm package itself is
+  used only for TypeScript declarations at build time.
+- `public/models/<arch>_streaming/` — the three streaming models (tiny, small,
+  medium), each with the canonical files the binding expects
+  (`frontend.ort`, `encoder.ort`, `adapter.ort`, `cross_kv.ort`,
+  `decoder_kv.ort`, `streaming_config.json`, `tokenizer.bin`). The app loads
+  them via `MicTranscriber.modelsFrom()`, which fetches the local URLs into
+  memory (cached by the browser Cache API) and feeds the in-memory loader —
+  the Moonshine CDN is never contacted.
+
+If the model files are missing, they can be re-fetched once (requires
+internet) with:
+
+```sh
+node scripts/fetch-models.mjs
+```
+
+`scripts/list-model-assets.mjs` prints the file list for each model by asking
+the WASM module's manifest helpers.
+
 ## Options
 
 - **Model size** — Tiny / Small / Medium streaming models (Small is the
   default). The choice is persisted in `localStorage` and restored on the next
-  visit. Models are downloaded once from the Moonshine CDN and cached in Cache
-  Storage.
-- **WebSocket URL** — type a new URL and press Enter (or Connect).
-- `?local=1` — load the binding from `/wasm/dist` instead of the jsDelivr CDN
-  (for a locally built `@moonshine-ai/moonshine-wasm`).
+  visit. All three are stored locally in `public/models/`.
 
 ## Notes
 
 - The Moonshine binding is imported at runtime rather than bundled: its
   Emscripten layer (`moonshine.mjs` + `moonshine.wasm` + pthread workers) is
-  not Vite-friendly. The npm package is installed for TypeScript declarations
-  only.
+  not Vite-friendly.
 - No audio ever leaves the browser — only transcribed text is sent to the
   WebSocket.

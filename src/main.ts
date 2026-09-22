@@ -1,6 +1,5 @@
 import {
   loadMoonshine,
-  moduleUrl,
   type MicTranscriber,
   type MoonshineModule,
   type TranscriptLine,
@@ -205,6 +204,26 @@ const ARCHES: { key: ArchKey; name: string; label: string }[] = [
   { key: 'medium', name: 'MediumStreaming', label: 'Medium · most accurate' },
 ];
 
+/**
+ * Canonical filenames of a streaming model, mapped onto the local copies
+ * served from /models/<arch>/. Passed to `modelsFrom()`, which fetches them
+ * into memory (caching via the browser Cache API) and feeds the in-memory
+ * loader — so no CDN is ever contacted.
+ */
+function localModelUrls(key: ArchKey): Record<string, string> {
+  const base = `/models/${key}_streaming`;
+  const names = [
+    'frontend.ort',
+    'encoder.ort',
+    'adapter.ort',
+    'cross_kv.ort',
+    'decoder_kv.ort',
+    'streaming_config.json',
+    'tokenizer.bin',
+  ];
+  return Object.fromEntries(names.map((name) => [name, `${base}/${name}`]));
+}
+
 let Moonshine: MoonshineModule;
 let selectedArch: ArchKey = 'small';
 
@@ -279,10 +298,11 @@ function onLine(line: TranscriptLine): void {
   logSeparator();
 }
 
-function buildMic(archName: string): MicTranscriber {
+function buildMic(archName: string, key: ArchKey): MicTranscriber {
   const arch = (Moonshine.ModelArch as unknown as Record<string, number>)[archName];
   return new Moonshine.MicTranscriber()
     .modelArch(arch)
+    .modelsFrom(localModelUrls(key))
     .onText(onPartial)
     .onLine(onLine)
     .onError((error: Error) => sttStatus(error.message, 'error'))
@@ -294,7 +314,7 @@ async function loadModel(): Promise<void> {
   const arch = ARCHES.find((a) => a.key === selectedArch)!;
   sttStatus(`Loading the ${arch.key} model…`);
   setProgress(null);
-  const instance = buildMic(arch.name);
+  const instance = buildMic(arch.name, arch.key);
   await instance.load();
   if (generation !== loadGeneration) {
     instance.close();
@@ -437,9 +457,6 @@ setInterval(() => {
 // --- Startup ------------------------------------------------------------------------
 
 void (async () => {
-  if (moduleUrl().startsWith('http')) {
-    console.info(`Loading Moonshine binding from ${moduleUrl()}`);
-  }
   Moonshine = await loadMoonshine();
   selectedArch = loadArchPreference();
   mountArchChips();
