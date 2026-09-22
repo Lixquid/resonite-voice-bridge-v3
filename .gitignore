@@ -141,3 +141,8 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Large model files (fetched from the URLs configured in the app settings;
+# see README "Local assets")
+public/models/small_streaming/
+public/models/medium_streaming/
