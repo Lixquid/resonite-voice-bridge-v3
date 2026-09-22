@@ -1,7 +1,8 @@
 {
-  "name": "moonshine-ws-transcriber",
+  "name": "resonite-voice-bridge",
   "private": true,
-  "version": "0.1.0",
+  "version": "3.0.0",
+  "author": "Lixquid (https://lixquid.com)",
   "license": "MIT",
   "type": "module",
   "scripts": {

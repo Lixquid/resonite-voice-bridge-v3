@@ -1,4 +1,6 @@
-# Moonshine → WebSocket Transcriber
+# Resonite Voice Bridge
+
+v3.0.0 · by [Lixquid](https://lixquid.com)
 
 A single-page app that listens to the microphone, transcribes speech **entirely
 in the browser** with the [Moonshine](https://github.com/moonshine-ai/moonshine)

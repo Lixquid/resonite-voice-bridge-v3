@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Moonshine → WebSocket Transcriber</title>
+    <title>Resonite Voice Bridge</title>
     <meta
       name="description"
       content="Live microphone transcription running entirely in the browser via the Moonshine WASM model, streamed over a WebSocket."
@@ -55,6 +55,14 @@
       header p {
         margin: 0;
         color: var(--muted);
+      }
+
+      header .version {
+        font-size: 0.45em;
+        font-weight: 500;
+        color: var(--faint);
+        vertical-align: middle;
+        margin-left: 0.5rem;
       }
 
       section {
@@ -439,7 +447,7 @@
   <body data-state="idle">
     <main>
       <header>
-        <h1>Moonshine → WebSocket Transcriber</h1>
+        <h1>Resonite Voice Bridge <span class="version">v3.0.0</span></h1>
         <p>
           Live speech-to-text with the Moonshine model, running entirely in this
           browser. In-progress sentences stream over the WebSocket as they grow;
