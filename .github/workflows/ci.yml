@@ -1,0 +1,59 @@
+# Continuous integration for Resonite Voice Bridge.
+#
+# Runs on every commit (all branches) and on pull requests, verifying both
+# projects:
+#
+#   - frontend: typechecks with tsc and builds with Vite.
+#   - systray:  vets, builds and tests the Go module.
+
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      # `npm run build` runs `tsc --noEmit` (typecheck) followed by the
+      # Vite production build.
+      - name: Typecheck and build
+        run: npm run build
+
+  systray:
+    name: Systray
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+      # The frontend dist is committed, so the embed (see frontend/embed.go)
+      # resolves without building the frontend here.
+      - name: Build
+        run: go build -trimpath -o bin/resonite-voice-bridge ./systray
