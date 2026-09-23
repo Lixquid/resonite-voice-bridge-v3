@@ -73,5 +73,13 @@ jobs:
       - name: Test
         run: go test ./...
 
+      # Embed the version (short commit ID plus -dirty when applicable),
+      # matching the Makefile logic in systray/version.go.
       - name: Build
-        run: go build -trimpath -o bin/resonite-voice-bridge ./systray
+        run: |
+          VERSION="$(git rev-parse --short HEAD)"
+          if [ -n "$(git status --porcelain)" ]; then
+            VERSION="${VERSION}-dirty"
+          fi
+          echo "==> Embedding version: $VERSION"
+          go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o bin/resonite-voice-bridge ./systray

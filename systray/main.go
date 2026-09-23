@@ -8,6 +8,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -21,6 +22,16 @@ import (
 const listenPort = "6789"
 
 func main() {
+	showVersion := flag.Bool("version", false, "print the embedded version and exit")
+	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(appVersion())
+		return
+	}
+
+	log.Printf("Resonite Voice Bridge %s", appVersion())
+
 	ln, err := net.Listen("tcp", ":"+listenPort)
 	if err != nil {
 		log.Fatalf("Failed to listen on port %s: %v", listenPort, err)
@@ -40,7 +51,12 @@ func main() {
 func onReady() {
 	systray.SetIcon(icon)
 	systray.SetTitle("Voice Bridge")
-	systray.SetTooltip("Resonite Voice Bridge — http://localhost:" + listenPort)
+	systray.SetTooltip("Resonite Voice Bridge " + appVersion() + " — http://localhost:" + listenPort)
+
+	// Readonly entry at the top of the menu showing the embedded
+	// application version (see version.go).
+	mVersion := systray.AddMenuItem("Version: "+appVersion(), "Embedded application version")
+	mVersion.Disable()
 
 	mOpen := systray.AddMenuItem("Open Web Interface", "Open http://localhost:"+listenPort+" in your browser")
 

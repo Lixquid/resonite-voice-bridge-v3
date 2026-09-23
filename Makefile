@@ -7,6 +7,19 @@ FRONTEND_DIR := frontend
 OUTPUT_DIR   := bin
 OUTPUT       := $(OUTPUT_DIR)/resonite-voice-bridge
 
+# Compute the embedded application version: the tag naming HEAD when present
+# (e.g. "v1.2.3"), otherwise the short commit ID; "-dirty" is appended when
+# there are uncommitted changes. Injected with -ldflags -X (see
+# systray/version.go). Falls back to Go's VCS stamping when git is absent.
+VERSION := $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
+ifneq ($(shell git tag --points-at HEAD 2>/dev/null | grep -E '^v' | head -1),)
+VERSION := $(shell git tag --points-at HEAD 2>/dev/null | grep -E '^v' | head -1)
+endif
+ifneq ($(shell git status --porcelain 2>/dev/null),)
+VERSION := $(VERSION)-dirty
+endif
+GO_LDFLAGS := -s -w -X main.version=$(VERSION)
+
 .PHONY: all build frontend frontend-install clean
 
 all: build
@@ -22,7 +35,8 @@ frontend: frontend-install
 # Build the full application: frontend first (its output is embedded),
 # then the Go binary.
 build: frontend
-	go build -trimpath -o $(OUTPUT) ./systray
+	@echo "==> Embedding version: $(VERSION)"
+	go build -trimpath -ldflags "$(GO_LDFLAGS)" -o $(OUTPUT) ./systray
 
 clean:
 	rm -rf $(OUTPUT_DIR)
