@@ -38,6 +38,13 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
+// count returns the number of currently connected clients.
+func (r *relay) count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.clients)
+}
+
 // serveRelay upgrades the request and starts pumping frames for this client.
 func serveRelay(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)

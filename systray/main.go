@@ -8,9 +8,11 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"time"
 
 	"fyne.io/systray"
 )
@@ -41,6 +43,20 @@ func onReady() {
 	systray.SetTooltip("Resonite Voice Bridge — http://localhost:" + listenPort)
 
 	mOpen := systray.AddMenuItem("Open Web Interface", "Open http://localhost:"+listenPort+" in your browser")
+
+	// Informational entry showing how many clients are currently connected
+	// to the relay. It is disabled and refreshed once a second.
+	mClients := systray.AddMenuItem("", "Clients currently connected to the relay")
+	mClients.Disable()
+	go func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			mClients.SetTitle(fmt.Sprintf("Connected clients: %d", theRelay.count()))
+			<-ticker.C
+		}
+	}()
+
 	systray.AddSeparator()
 	mQuit := systray.AddMenuItem("Quit", "Shut down the relay")
 
