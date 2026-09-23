@@ -1,0 +1,648 @@
+:root {
+  --bg: #0b0d10;
+  --panel: rgba(255, 255, 255, 0.04);
+  --panel-strong: rgba(9, 11, 15, 0.6);
+  --line: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.22);
+  --text: #eef1f6;
+  --muted: #9aa3b2;
+  --faint: #6b7482;
+  --accent: #6ea8fe;
+  --good: #3ddc97;
+  --warn: #ffb454;
+  --bad: #ff6b6b;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --radius: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  padding: 2rem 1rem 4rem;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+main {
+  max-width: 46rem;
+  margin: 0 auto;
+  display: grid;
+  gap: 1.25rem;
+}
+
+header h1 {
+  margin: 0 0 0.35rem;
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  letter-spacing: -0.02em;
+}
+
+header p {
+  margin: 0;
+  color: var(--muted);
+}
+
+header .version {
+  font-size: 0.45em;
+  font-weight: 500;
+  color: var(--faint);
+  vertical-align: middle;
+  margin-left: 0.5rem;
+}
+
+section {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 1.1rem 1.25rem;
+}
+
+h2 {
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--faint);
+}
+
+/* Connection state appended to a section heading, e.g.
+   "WEBSOCKET CONNECTION — CONNECTED", colored by state. */
+.ws-state {
+  font-weight: 500;
+}
+
+.ws-state--open {
+  color: var(--good);
+}
+
+.ws-state--connecting {
+  color: var(--warn);
+}
+
+.ws-state--closed {
+  color: var(--faint);
+}
+
+.ws-state--error {
+  color: var(--bad);
+}
+
+/* --- Connection row --------------------------------------------------- */
+
+.conn {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.conn input {
+  flex: 1;
+  min-width: 16rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-strong);
+  color: var(--text);
+  font: 0.9rem var(--mono);
+}
+
+.conn input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+button {
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.btn {
+  padding: 0.55rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--line-strong);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.btn--accent {
+  border-color: rgba(110, 168, 254, 0.5);
+  background: rgba(110, 168, 254, 0.12);
+}
+
+/* --- Status dots ------------------------------------------------------ */
+
+.dot {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--faint);
+  flex: none;
+}
+
+.dot--connecting {
+  background: var(--warn);
+  animation: blink 1s ease infinite;
+}
+
+.dot--open {
+  background: var(--good);
+}
+
+.dot--error {
+  background: var(--bad);
+}
+
+/* --- Settings ---------------------------------------------------------- */
+
+.opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin-top: 0.85rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  width: fit-content;
+}
+
+.opt > span {
+  color: var(--text);
+}
+
+.opt--first {
+  margin-top: 1.75rem;
+}
+
+.opt input {
+  width: 1.05rem;
+  height: 1.05rem;
+  margin-top: 0.1rem;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.opt code {
+  font: 0.85em var(--mono);
+  color: var(--warn);
+}
+
+.opt-sub {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.78rem;
+  font-weight: normal;
+  color: var(--muted);
+  opacity: 0.85;
+}
+
+/* --- Documentation ------------------------------------------------------ */
+
+.doc {
+  margin-top: 0.9rem;
+}
+
+.doc summary {
+  cursor: pointer;
+  padding: 0 1.25rem 0 0;
+  font-weight: 600;
+  font-size: 0.95rem;
+  list-style: none;
+  user-select: none;
+  color: var(--muted);
+  transition: color 120ms ease;
+}
+
+.doc summary:hover {
+  color: var(--text);
+}
+
+.doc summary::-webkit-details-marker,
+.doc summary::marker {
+  display: none;
+  content: "";
+}
+
+.doc summary::before {
+  content: "";
+  display: inline-block;
+  width: 0.38rem;
+  height: 0.38rem;
+  border-right: 1.5px solid var(--faint);
+  border-bottom: 1.5px solid var(--faint);
+  margin-right: 0.5rem;
+  vertical-align: 1px;
+  transform: rotate(-45deg);
+  transition: transform 120ms ease;
+}
+
+.doc[open] summary::before {
+  transform: rotate(45deg);
+}
+
+.doc ul {
+  margin: 0.25rem 0 0;
+  padding: 0 1.25rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.doc code,
+.doc-event-btn {
+  font: 0.85em var(--mono);
+  color: var(--warn);
+  background: none;
+  border: none;
+  padding: 0.05rem 0.25rem;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 120ms ease;
+}
+
+.doc code:hover,
+.doc-event-btn:hover {
+  background: rgba(255, 180, 84, 0.15);
+}
+
+.doc-event-btn:active {
+  background: rgba(255, 180, 84, 0.3);
+}
+
+/* Toast notification */
+.toast {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--good);
+  color: var(--bg);
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  z-index: 1000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  animation: toastIn 0.3s ease, toastOut 0.3s ease 2.5s forwards;
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(-50%) scale(0.9); }
+  to { opacity: 1; transform: translateX(-50%) scale(1); }
+}
+
+@keyframes toastOut {
+  from { opacity: 1; transform: translateX(-50%) scale(1); }
+  to { opacity: 0; transform: translateX(-50%) scale(0.9); }
+}
+
+.toast.hidden {
+  display: none;
+}
+
+/* --- Settings gear + dialog -------------------------------------------- */
+
+.gear {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  margin: 0.25rem 0 0;
+  margin-left: auto; /* right-align under the panels */
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--faint);
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.gear:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+}
+
+.gear svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+dialog {
+  width: min(34rem, calc(100vw - 2rem));
+  padding: 1.25rem 1.4rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: #12151b;
+  color: var(--text);
+}
+
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+dialog h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+}
+
+dialog .hint {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+dialog .field {
+  display: grid;
+  gap: 0.3rem;
+  margin-bottom: 0.9rem;
+}
+
+dialog label {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+dialog input {
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--text);
+  font: 0.9rem var(--mono);
+}
+
+dialog input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+dialog .actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1.1rem;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* --- Mic row ---------------------------------------------------------- */
+
+.mic-row {
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+}
+
+.mic {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 4.25rem;
+  height: 4.25rem;
+  flex: none;
+  padding: 0;
+  border: 1px solid rgba(110, 168, 254, 0.45);
+  border-radius: 50%;
+  background: rgba(110, 168, 254, 0.1);
+  color: var(--text);
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.mic:hover:not(:disabled) {
+  border-color: rgba(110, 168, 254, 0.75);
+  background: rgba(110, 168, 254, 0.2);
+}
+
+.mic:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.mic svg {
+  width: 1.7rem;
+  height: 1.7rem;
+}
+
+.mic__stop {
+  display: none;
+}
+
+body[data-state="listening"] .mic {
+  border-color: transparent;
+  color: #0d1017;
+  background: linear-gradient(135deg, #6ea8fe, #3ddc97);
+  animation: pulse 2s ease-out infinite;
+}
+
+body[data-state="listening"] .mic__mic {
+  display: none;
+}
+
+body[data-state="listening"] .mic__stop {
+  display: block;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(110, 168, 254, 0.45);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 14px rgba(110, 168, 254, 0);
+  }
+}
+
+.mic-meta {
+  min-width: 0;
+}
+
+.mic-meta .label {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.status {
+  margin: 0.15rem 0 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.status[data-kind="error"] {
+  color: var(--bad);
+}
+
+.status[data-kind="ready"] {
+  color: var(--good);
+}
+
+.status[data-kind="info"] {
+  color: var(--accent);
+}
+
+
+
+/* --- Progress --------------------------------------------------------- */
+
+.progress {
+  height: 4px;
+  margin-top: 0.9rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.progress.is-active {
+  opacity: 1;
+}
+
+.progress__bar {
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #6ea8fe, #3ddc97);
+  transition: width 200ms ease;
+}
+
+.progress.is-indeterminate .progress__bar {
+  width: 40%;
+  animation: slide 1.2s ease-in-out infinite;
+}
+
+@keyframes slide {
+  0% {
+    margin-left: -40%;
+  }
+  100% {
+    margin-left: 100%;
+  }
+}
+
+/* --- Model chips ------------------------------------------------------ */
+
+.chips {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+
+#archChips {
+  margin-top: 0.3rem;
+}
+
+.chip {
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.85rem;
+  transition: all 120ms ease;
+}
+
+.chip:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+}
+
+.chip.is-active {
+  color: #0d1017;
+  border-color: transparent;
+  background: var(--accent);
+  font-weight: 600;
+}
+
+/* --- Live transcript + frame log -------------------------------------- */
+
+.live {
+  margin-top: 0.9rem;
+  padding: 0.8rem 1rem;
+  min-height: 2.4rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.45);
+  font-size: 1.02rem;
+  color: var(--text);
+}
+
+/* Greyed-out label while nothing is being spoken. */
+.live:empty::before {
+  content: "Live output";
+  color: var(--faint);
+}
+
+.frames {
+  margin-top: 0.75rem;
+  max-height: 18rem;
+  overflow-y: auto;
+  font: 0.85rem var(--mono);
+  display: grid;
+  gap: 0.15rem;
+}
+
+.frames:empty::after {
+  content: "Connection, model, and frame events will appear here.";
+  color: var(--faint);
+  font-family: system-ui;
+}
+
+.frame {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.1rem 0.2rem;
+  border-radius: 4px;
+}
+
+.frame time {
+  color: var(--faint);
+  flex: none;
+}
+
+.frame--partial .msg {
+  color: var(--muted);
+}
+
+.frame--final .msg {
+  color: var(--good);
+  font-weight: 600;
+}
+
+.frame--pause .msg {
+  color: var(--warn);
+}
+
+.frame--sys .msg {
+  color: var(--faint);
+  font-style: italic;
+}
+
+.frame--error .msg {
+  color: var(--bad);
+}
+
+.frames .sep {
+  border-top: 1px solid var(--line);
+  margin: 0.35rem 0;
+}

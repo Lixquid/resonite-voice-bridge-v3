@@ -7,6 +7,7 @@ import {
   type MoonshineModule,
   type TranscriptLine,
 } from './moonshine';
+import './style.css';
 
 const DEFAULT_WS_URL = 'ws://localhost:9999';
 const QUEUE_LIMIT = 500;
@@ -780,6 +781,24 @@ els.wsUrl.addEventListener('keydown', (event) => {
 setInterval(() => {
   if (wsState === 'closed' && !userStopped) connect();
 }, RECONNECT_INTERVAL_MS);
+
+// --- Documentation copy buttons ---------------------------------------------------
+
+/** Shows a transient "Copied!" toast after a copy action. */
+function showToast() {
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = 'Copied!';
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+document.querySelectorAll<HTMLButtonElement>('.doc-event-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    void navigator.clipboard.writeText(btn.getAttribute('data-event') ?? '');
+    showToast();
+  });
+});
 
 // --- Startup ------------------------------------------------------------------------
 
