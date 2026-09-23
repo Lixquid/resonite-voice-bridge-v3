@@ -42,14 +42,21 @@ Are you well?
   model detects the speaker has stopped. A `[speechEnded]` frame is sent after
   it by default; the toggle in the WebSocket section (persisted in
   `localStorage`) turns that off, in which case the pause is only noted in the
-  UI log.
-- A second toggle (persisted, default off) lowercases sent frames and strips
+  UI log.- A second toggle (persisted, default off) lowercases sent frames and strips
   all non-alphanumeric characters, keeping spaces as the only whitespace
   (`Hello, how are you?` → `hello how are you`; tabs and newlines are removed,
   space runs collapse to one). It is unicode-aware, so accented letters and
   digits survive, and it never mangles the `[speechEnded]` control frame.
   Partial-frame deduplication compares sanitized values, so `Hello,` followed
-  by `Hello` sends once.
+  by `Hello` sends once. It never mangles the event control frames (see
+  below).
+- Event frames are sent when the "Send Events" toggle is on:
+  `[speechEnded]` after each final frame, `[enabled]` when the microphone has
+  been enabled, `[disabled]` when the microphone has been disabled,
+  `[removePunctuationEnabled]`/`[removePunctuationDisabled]` when the
+  punctuation removal feature has been enabled or disabled, and
+  `[outputStreamingEnabled]`/`[outputStreamingDisabled]` when the output
+  streaming feature has been enabled or disabled.
 - The WebSocket defaults to `ws://localhost:9999` (editable in the UI). Frames
   are queued while the socket is down and flushed once it connects, so
   transcription never stalls on the connection.

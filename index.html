@@ -460,6 +460,10 @@
         color: var(--good);
       }
 
+      .status[data-kind="info"] {
+        color: var(--accent);
+      }
+
 
 
       /* --- Progress --------------------------------------------------------- */
@@ -719,6 +723,12 @@
           <summary>Events</summary>
           <ul>
             <li><code>[speechEnded]</code> - Sent whenever the user stops speaking.</li>
+            <li><code>[enabled]</code> - Sent when the microphone has been enabled.</li>
+            <li><code>[disabled]</code> - Sent when the microphone has been disabled.</li>
+            <li><code>[removePunctuationEnabled]</code> - Sent when the punctuation removal feature has been enabled.</li>
+            <li><code>[removePunctuationDisabled]</code> - Sent when the punctuation removal feature has been disabled.</li>
+            <li><code>[outputStreamingEnabled]</code> - Sent when the output streaming feature has been enabled.</li>
+            <li><code>[outputStreamingDisabled]</code> - Sent when the output streaming feature has been disabled.</li>
           </ul>
         </details>
       </section>

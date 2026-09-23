@@ -16,6 +16,25 @@ const FRAME_LOG_LIMIT = 500;
 const RECONNECT_INTERVAL_MS = 10_000;
 /** Text frame sent when the model detects the end of speech, if enabled. */
 const SPEECH_ENDED_FRAME = '[speechEnded]';
+/** Event frames sent when the microphone is turned on or off. */
+const ENABLED_FRAME = '[enabled]';
+const DISABLED_FRAME = '[disabled]';
+/** Event frames sent when the punctuation removal toggle changes. */
+const REMOVE_PUNCTUATION_ENABLED_FRAME = '[removePunctuationEnabled]';
+const REMOVE_PUNCTUATION_DISABLED_FRAME = '[removePunctuationDisabled]';
+/** Event frames sent when the output streaming toggle changes. */
+const OUTPUT_STREAMING_ENABLED_FRAME = '[outputStreamingEnabled]';
+const OUTPUT_STREAMING_DISABLED_FRAME = '[outputStreamingDisabled]';
+/** All event frames — sanitize is bypassed so these markers stay intact. */
+const EVENT_FRAMES = new Set([
+  SPEECH_ENDED_FRAME,
+  ENABLED_FRAME,
+  DISABLED_FRAME,
+  REMOVE_PUNCTUATION_ENABLED_FRAME,
+  REMOVE_PUNCTUATION_DISABLED_FRAME,
+  OUTPUT_STREAMING_ENABLED_FRAME,
+  OUTPUT_STREAMING_DISABLED_FRAME,
+]);
 /** Persisted flag: send event frames (e.g. {@link SPEECH_ENDED_FRAME})? Default on. */
 const SEND_EVENTS_KEY = 'sendEvents';
 /** Persisted flag: lowercase + strip non-alphanumerics from sent frames. */
@@ -207,11 +226,12 @@ function logEvent(text: string, kind: 'sys' | 'error' = 'sys'): void {
  * lowercases it, removes every non-alphanumeric character, and keeps spaces
  * as the only whitespace — other whitespace (tabs, newlines) is dropped, and
  * runs of spaces collapse to one with none at the edges. Unicode-aware, so
- * accented letters and digits survive. The `[speechEnded]` control frame is
- * exempt — stripping its punctuation would destroy the marker.
+ * accented letters and digits survive. Event control frames such as
+ * `[speechEnded]` are exempt — stripping their punctuation would destroy the
+ * markers.
  */
 function sanitizeForWire(text: string, kind: FrameKind): string {
-  if (kind === 'final' && text === SPEECH_ENDED_FRAME) return text;
+  if (EVENT_FRAMES.has(text)) return text;
   if (!els.sanitize.checked) return text;
   return text
     .toLowerCase()
@@ -314,7 +334,7 @@ let running = false;
 /** Last partial sent, so frames are only pushed when the sentence grows. */
 let lastSent = '';
 
-function sttStatus(text: string, kind?: 'error' | 'ready'): void {
+function sttStatus(text: string, kind?: 'error' | 'ready' | 'info'): void {
   els.sttStatus.textContent = text;
   els.sttStatus.dataset.kind = kind ?? '';
 }
@@ -351,6 +371,15 @@ function onPartial(text: string): void {
 }
 
 /**
+ * Sends an event control frame (e.g. `[speechEnded]`) when the "Send Events"
+ * toggle is on; silently suppressed otherwise. Sent as a `final` frame so
+ * sanitize never mangles the marker.
+ */
+function sendEvent(frame: string): void {
+  if (els.sendEvents.checked) sendFrame('final', frame);
+}
+
+/**
  * Called once per finished line — when the model detects speech has stopped.
  * Sends the final sentence, optionally the `[speechEnded]` marker frame, and
  * resets so the next phrase starts from fresh. The pause row in the log notes
@@ -367,6 +396,40 @@ function onLine(line: TranscriptLine): void {
     logFrame('pause', '');
   }
   logSeparator();
+}
+
+/**
+ * Sends the `[enabled]` event frame after the microphone has been enabled.
+ */
+function onMicEnabled(): void {
+  sendEvent(ENABLED_FRAME);
+}
+
+/**
+ * Sends the `[disabled]` event frame after the microphone has been disabled.
+ */
+function onMicDisabled(): void {
+  sendEvent(DISABLED_FRAME);
+}
+
+/**
+ * Sends the `[removePunctuationEnabled]` / `[removePunctuationDisabled]`
+ * event frame whenever the punctuation removal toggle changes.
+ */
+function onRemovePunctuationToggled(): void {
+  sendEvent(
+    els.sanitize.checked ? REMOVE_PUNCTUATION_ENABLED_FRAME : REMOVE_PUNCTUATION_DISABLED_FRAME,
+  );
+}
+
+/**
+ * Sends the `[outputStreamingEnabled]` / `[outputStreamingDisabled]` event
+ * frame whenever the output streaming toggle changes.
+ */
+function onOutputStreamingToggled(): void {
+  sendEvent(
+    els.streamedOutput.checked ? OUTPUT_STREAMING_ENABLED_FRAME : OUTPUT_STREAMING_DISABLED_FRAME,
+  );
 }
 
 /**
@@ -450,9 +513,67 @@ async function loadModel(): Promise<void> {
   mic = instance;
   setProgress(1);
   els.mic.disabled = false;
-  if (!running) els.micLabel.textContent = 'Start listening';
+  if (!running) showReadyState();
   logEvent(`Model ${arch.key}: loaded successfully.`);
-  sttStatus('Model ready — press the mic and start talking.', 'ready');
+}
+
+// --- Microphone states -------------------------------------------------------
+
+/** An error whose {@link Error.name} marks it as a microphone permission denial. */
+function micPermissionError(): Error {
+  const err = new Error('The microphone permission was denied');
+  err.name = 'NotAllowedError';
+  return err;
+}
+
+/** True when the error is a microphone permission denial. */
+function isMicPermissionError(err: unknown): boolean {
+  const name = (err as DOMException | null)?.name;
+  return name === 'NotAllowedError' || name === 'SecurityError';
+}
+
+/** Model loaded and idle: the mic can be pressed again. */
+function showReadyState(): void {
+  els.micLabel.textContent = 'Ready';
+  sttStatus('Model ready - press the mic to start sending', 'ready');
+}
+
+/** Microphone access refused by the user (or previously denied). */
+function showPermissionDeniedState(): void {
+  els.micLabel.textContent = 'Failed';
+  sttStatus('The microphone permission was denied', 'error');
+}
+
+/** The current permission state, falling back to 'prompt' when unqueryable. */
+async function currentMicPermission(): Promise<PermissionState> {
+  try {
+    const status = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+    return status.state;
+  } catch {
+    return 'prompt'; // The Permissions API may not support 'microphone' here.
+  }
+}
+
+/**
+ * Ensures microphone access is granted before starting the transcriber.
+ * Drives the "Waiting for Microphone Permission..." state while the browser
+ * dialog is open, and resolves to a {@link micPermissionError} when denied.
+ */
+async function ensureMicPermission(): Promise<void> {
+  const state = await currentMicPermission();
+  if (state === 'denied') throw micPermissionError();
+  if (state !== 'prompt') return; // already granted
+  els.micLabel.textContent = 'Waiting for Microphone Permission...';
+  sttStatus('Authorize the permission dialog to start sending', 'info');
+  try {
+    // Triggers the browser's permission dialog; the stream is released right
+    // away — the transcriber opens its own once permission is granted.
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((track) => track.stop());
+  } catch (err) {
+    if (isMicPermissionError(err)) throw micPermissionError();
+    throw err;
+  }
 }
 
 /** Warm-starts the model download as soon as the page loads. */
@@ -479,15 +600,21 @@ async function startListening(): Promise<void> {
   try {
     await micReady; // the model may still be downloading on first press
     if (!mic) await loadModel();
+    await ensureMicPermission();
     await mic!.start();
     running = true;
     document.body.dataset.state = 'listening';
     els.mic.setAttribute('aria-label', 'Stop listening');
     els.micLabel.textContent = 'Listening';
     sttStatus('Transcribing', 'ready');
+    onMicEnabled();
   } catch (err) {
-    els.micLabel.textContent = 'Start listening';
-    sttStatus((err as Error).message, 'error');
+    if (isMicPermissionError(err)) {
+      showPermissionDeniedState();
+    } else {
+      els.micLabel.textContent = 'Ready';
+      sttStatus((err as Error).message, 'error');
+    }
   } finally {
     els.mic.disabled = false;
   }
@@ -500,9 +627,9 @@ async function stopListening(): Promise<void> {
   els.live.textContent = '';
   document.body.dataset.state = 'idle';
   els.mic.setAttribute('aria-label', 'Start listening');
-  els.micLabel.textContent = 'Start listening';
-  sttStatus('Stopped. The connection stays open for the next session.', 'ready');
+  showReadyState();
   els.mic.disabled = false;
+  onMicDisabled();
 }
 
 els.mic.addEventListener('click', () => {
@@ -573,6 +700,7 @@ els.sanitize.addEventListener('change', () => {
   } catch {
     // Nothing to do — the toggle still applies for this session.
   }
+  onRemovePunctuationToggled();
 });
 
 // Restores the persisted streamed-output preference (default: on).
@@ -589,6 +717,7 @@ els.streamedOutput.addEventListener('change', () => {
   } catch {
     // Nothing to do — the toggle still applies for this session.
   }
+  onOutputStreamingToggled();
 });
 
 // --- Settings dialog ---------------------------------------------------------------
