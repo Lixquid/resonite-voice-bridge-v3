@@ -19,6 +19,39 @@ const SPEECH_ENDED_KEY = 'sendSpeechEnded';
 const SANITIZE_KEY = 'sanitizeFrames';
 /** Persisted key of the last used model size ({@link ArchKey}). */
 const MODEL_KEY = 'modelArch';
+/** Persisted base URLs for the models not shipped with the app. */
+const MODEL_URL_KEY = 'modelUrls';
+/** Default download location for the small and medium models. */
+const CDN_BASE = 'https://download.moonshine.ai/model';
+const CDN_REV = 'quantized_26_07_30';
+
+const DEFAULT_MODEL_URLS: Record<Exclude<ArchKey, 'tiny'>, string> = {
+  small: `${CDN_BASE}/small-streaming-en/${CDN_REV}`,
+  medium: `${CDN_BASE}/medium-streaming-en/${CDN_REV}`,
+};
+
+/** Base URLs for non-bundled models, as persisted in localStorage. */
+function loadModelUrls(): Record<Exclude<ArchKey, 'tiny'>, string> {
+  try {
+    const saved = JSON.parse(localStorage.getItem(MODEL_URL_KEY) ?? '{}') as Partial<
+      Record<Exclude<ArchKey, 'tiny'>, string>
+    >;
+    return {
+      small: saved.small?.trim() || DEFAULT_MODEL_URLS.small,
+      medium: saved.medium?.trim() || DEFAULT_MODEL_URLS.medium,
+    };
+  } catch {
+    return { ...DEFAULT_MODEL_URLS };
+  }
+}
+
+function saveModelUrls(urls: Record<Exclude<ArchKey, 'tiny'>, string>): void {
+  try {
+    localStorage.setItem(MODEL_URL_KEY, JSON.stringify(urls));
+  } catch {
+    // Nothing to do — the values still apply for this session.
+  }
+}
 
 const els = {
   wsDot: document.getElementById('wsDot') as HTMLSpanElement,
@@ -28,6 +61,13 @@ const els = {
   wsState: document.getElementById('wsState') as HTMLElement,
   speechEnded: document.getElementById('speechEnded') as HTMLInputElement,
   sanitize: document.getElementById('sanitize') as HTMLInputElement,
+  settings: document.getElementById('settings') as HTMLButtonElement,
+  settingsDialog: document.getElementById('settingsDialog') as HTMLDialogElement,
+  settingsSave: document.getElementById('settingsSave') as HTMLButtonElement,
+  settingsCancel: document.getElementById('settingsCancel') as HTMLButtonElement,
+  settingsReset: document.getElementById('settingsReset') as HTMLButtonElement,
+  smallUrl: document.getElementById('smallUrl') as HTMLInputElement,
+  mediumUrl: document.getElementById('mediumUrl') as HTMLInputElement,
   micLabel: document.getElementById('micLabel') as HTMLElement,
   sttStatus: document.getElementById('sttStatus') as HTMLParagraphElement,
   progress: document.getElementById('progress') as HTMLElement,
@@ -204,24 +244,32 @@ const ARCHES: { key: ArchKey; name: string; label: string }[] = [
   { key: 'medium', name: 'MediumStreaming', label: 'Medium · most accurate' },
 ];
 
+/** Canonical filenames every streaming model needs. */
+const MODEL_FILES = [
+  'frontend.ort',
+  'encoder.ort',
+  'adapter.ort',
+  'cross_kv.ort',
+  'decoder_kv.ort',
+  'streaming_config.json',
+  'tokenizer.bin',
+] as const;
+
 /**
- * Canonical filenames of a streaming model, mapped onto the local copies
- * served from /models/<arch>/. Passed to `modelsFrom()`, which fetches them
- * into memory (caching via the browser Cache API) and feeds the in-memory
- * loader — so no CDN is ever contacted.
+ * Maps a model's canonical filenames onto candidate base URLs, tried in
+ * order. The tiny model ships with the app; the others are first looked for
+ * on the same server (`/models/…`, present when vendored) and then fetched
+ * from the base URL configured in the settings dialog.
  */
-function localModelUrls(key: ArchKey): Record<string, string> {
-  const base = `/models/${key}_streaming`;
-  const names = [
-    'frontend.ort',
-    'encoder.ort',
-    'adapter.ort',
-    'cross_kv.ort',
-    'decoder_kv.ort',
-    'streaming_config.json',
-    'tokenizer.bin',
-  ];
-  return Object.fromEntries(names.map((name) => [name, `${base}/${name}`]));
+function modelUrlCandidates(key: ArchKey): string[] {
+  const bases: string[] = [];
+  if (key === 'tiny') {
+    bases.push('/models/tiny_streaming');
+  } else {
+    bases.push(`/models/${key}_streaming`);
+    bases.push(loadModelUrls()[key]);
+  }
+  return bases;
 }
 
 let Moonshine: MoonshineModule;
@@ -298,15 +346,58 @@ function onLine(line: TranscriptLine): void {
   logSeparator();
 }
 
+/**
+ * Decides where each model file comes from: probes the local /models/ path
+ * first (streaming models only), falling back to the configured base URL for
+ * any file the server does not have. Mixing is fine — the loader just wants a
+ * URL per canonical filename.
+ */
+async function resolveModelUrls(key: ArchKey): Promise<Record<string, string>> {
+  const bases = modelUrlCandidates(key);
+  const localBase = bases[0];
+  const result: Record<string, string> = {};
+  for (const name of MODEL_FILES) {
+    result[name] = `${bases[bases.length - 1]}/${name}`;
+  }
+  if (bases.length === 1) return result; // bundled model: all local
+
+  // Probe each file on the local path; use the remote base for misses. The
+  // probe checks the content type because SPA dev servers answer 200 with
+  // index.html for unknown paths rather than a 404.
+  const probes = await Promise.all(
+    MODEL_FILES.map(async (name) => {
+      try {
+        const response = await fetch(`${localBase}/${name}`, { method: 'HEAD' });
+        if (!response.ok) return false;
+        const type = response.headers.get('content-type') ?? '';
+        return !type.includes('text/html');
+      } catch {
+        return false;
+      }
+    }),
+  );
+  const remoteBase = bases[1];
+  MODEL_FILES.forEach((name, i) => {
+    if (!probes[i]) result[name] = `${remoteBase}/${name}`;
+  });
+  const localCount = probes.filter(Boolean).length;
+  console.info(
+    `[${key}_streaming] ${localCount}/${MODEL_FILES.length} files served locally` +
+      (localCount < MODEL_FILES.length ? `, rest from ${remoteBase}` : ''),
+  );
+  return result;
+}
+
 function buildMic(archName: string, key: ArchKey): MicTranscriber {
   const arch = (Moonshine.ModelArch as unknown as Record<string, number>)[archName];
-  return new Moonshine.MicTranscriber()
+  const instance = new Moonshine.MicTranscriber()
     .modelArch(arch)
-    .modelsFrom(localModelUrls(key))
     .onText(onPartial)
     .onLine(onLine)
     .onError((error: Error) => sttStatus(error.message, 'error'))
     .onProgress((fraction: number, _file: string) => setProgress(fraction));
+  // modelsFrom() is applied once the URL map is resolved, right before load().
+  return instance;
 }
 
 async function loadModel(): Promise<void> {
@@ -315,6 +406,7 @@ async function loadModel(): Promise<void> {
   sttStatus(`Loading the ${arch.key} model…`);
   setProgress(null);
   const instance = buildMic(arch.name, arch.key);
+  instance.modelsFrom(await resolveModelUrls(arch.key));
   await instance.load();
   if (generation !== loadGeneration) {
     instance.close();
@@ -433,6 +525,37 @@ els.sanitize.addEventListener('change', () => {
   } catch {
     // Nothing to do — the toggle still applies for this session.
   }
+});
+
+// --- Settings dialog ---------------------------------------------------------------
+
+function openSettings(): void {
+  const urls = loadModelUrls();
+  els.smallUrl.value = urls.small;
+  els.mediumUrl.value = urls.medium;
+  els.settingsDialog.showModal();
+}
+
+els.settings.addEventListener('click', openSettings);
+
+els.settingsSave.addEventListener('click', () => {
+  const small = els.smallUrl.value.trim() || DEFAULT_MODEL_URLS.small;
+  const medium = els.mediumUrl.value.trim() || DEFAULT_MODEL_URLS.medium;
+  saveModelUrls({ small, medium });
+  els.settingsDialog.close();
+  // A pending/running model load may now point somewhere else: reload it.
+  if (!running && mic) {
+    mic.close();
+    mic = null;
+    warmStart();
+  }
+});
+
+els.settingsCancel.addEventListener('click', () => els.settingsDialog.close());
+
+els.settingsReset.addEventListener('click', () => {
+  els.smallUrl.value = DEFAULT_MODEL_URLS.small;
+  els.mediumUrl.value = DEFAULT_MODEL_URLS.medium;
 });
 
 // --- WebSocket controls ----------------------------------------------------------

@@ -207,6 +207,88 @@
         color: var(--warn);
       }
 
+      /* --- Settings gear + dialog -------------------------------------------- */
+
+      .gear {
+        display: grid;
+        place-items: center;
+        width: 2rem;
+        height: 2rem;
+        padding: 0;
+        margin: 0 0 0.75rem;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: transparent;
+        color: var(--faint);
+        transition: color 120ms ease, border-color 120ms ease;
+      }
+
+      .gear:hover {
+        color: var(--text);
+        border-color: var(--line-strong);
+      }
+
+      .gear svg {
+        width: 1.1rem;
+        height: 1.1rem;
+      }
+
+      dialog {
+        width: min(34rem, calc(100vw - 2rem));
+        padding: 1.25rem 1.4rem;
+        border: 1px solid var(--line-strong);
+        border-radius: var(--radius);
+        background: #12151b;
+        color: var(--text);
+      }
+
+      dialog::backdrop {
+        background: rgba(0, 0, 0, 0.6);
+      }
+
+      dialog h3 {
+        margin: 0 0 0.25rem;
+        font-size: 1.05rem;
+      }
+
+      dialog .hint {
+        margin: 0 0 1rem;
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+
+      dialog .field {
+        display: grid;
+        gap: 0.3rem;
+        margin-bottom: 0.9rem;
+      }
+
+      dialog label {
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+
+      dialog input {
+        padding: 0.55rem 0.75rem;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(0, 0, 0, 0.45);
+        color: var(--text);
+        font: 0.9rem var(--mono);
+      }
+
+      dialog input:focus {
+        outline: none;
+        border-color: var(--accent);
+      }
+
+      dialog .actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        margin-top: 1.1rem;
+      }
+
       @keyframes blink {
         50% {
           opacity: 0.3;
@@ -481,6 +563,36 @@
           <span>Lowercase and strip non-alphanumerics (spaces kept) from sent frames</span>
         </label>
       </section>
+
+      <button id="settings" class="gear" type="button" aria-label="Settings" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+        </svg>
+      </button>
+
+      <dialog id="settingsDialog">
+        <h3>Model locations</h3>
+        <p class="hint">
+          The tiny model ships with the app. If a small or medium model is
+          found on the server it is used from disk; otherwise it is downloaded
+          from these URLs (Moonshine CDN by default) and cached in the browser.
+        </p>
+        <div class="field">
+          <label for="smallUrl">Small model base URL</label>
+          <input id="smallUrl" type="text" spellcheck="false" />
+        </div>
+        <div class="field">
+          <label for="mediumUrl">Medium model base URL</label>
+          <input id="mediumUrl" type="text" spellcheck="false" />
+        </div>
+        <div class="actions">
+          <button id="settingsReset" class="btn" type="button">Reset to defaults</button>
+          <button id="settingsCancel" class="btn" type="button">Cancel</button>
+          <button id="settingsSave" class="btn btn--accent" type="button">Save</button>
+        </div>
+      </dialog>
 
       <section>
         <h2>Microphone</h2>

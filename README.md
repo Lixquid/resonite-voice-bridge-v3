@@ -81,15 +81,19 @@ as the Moonshine examples' `serve.mjs`).
   imported at runtime from `/wasm/dist/index.js`. The npm package itself is
   used only for TypeScript declarations at build time. The Moonshine license
   ships alongside it (`public/wasm/dist/LICENSE.moonshine`).
-- `public/models/<arch>_streaming/` — the three streaming models (tiny, small,
-  medium), each with the canonical files the binding expects
+- `public/models/tiny_streaming/` — the tiny streaming model, which ships
+  with the app. It has the canonical files the binding expects
   (`frontend.ort`, `encoder.ort`, `adapter.ort`, `cross_kv.ort`,
-  `decoder_kv.ort`, `streaming_config.json`, `tokenizer.bin`). The app loads
-  them via `MicTranscriber.modelsFrom()`, which fetches the local URLs into
-  memory (cached by the browser Cache API) and feeds the in-memory loader —
-  the Moonshine CDN is never contacted.
+  `decoder_kv.ort`, `streaming_config.json`, `tokenizer.bin`).
+- The **small and medium** models are too large for the repo and are
+  gitignored. At load time the app first looks for them on the same server
+  (`/models/small_streaming/`, `/models/medium_streaming/` — vendored via the
+  script below, or any reverse-proxied copy) and fetches any missing file from
+  the base URLs set in the settings dialog (cogwheel), which default to the
+  Moonshine CDN. Whatever is found is loaded via `MicTranscriber.modelsFrom()`
+  into memory (cached by the browser Cache API).
 
-If the model files are missing, they can be re-fetched once (requires
+If you want the small/medium models served locally, fetch them once (requires
 internet) with:
 
 ```sh
@@ -103,7 +107,11 @@ the WASM module's manifest helpers.
 
 - **Model size** — Tiny / Small / Medium streaming models (Small is the
   default). The choice is persisted in `localStorage` and restored on the next
-  visit. All three are stored locally in `public/models/`.
+  visit. Tiny is bundled; the small/medium download locations are configurable
+  in the settings dialog and persisted too.
+- **Settings (cogwheel)** — base URLs for the small and medium models, used
+  when the files are not served locally. Reset to defaults is one click; saved
+  URLs take effect on the next model load.
 
 ## Notes
 
