@@ -312,10 +312,6 @@ button {
   to { opacity: 0; transform: translateX(-50%) scale(0.9); }
 }
 
-.toast.hidden {
-  display: none;
-}
-
 /* --- Settings gear + dialog -------------------------------------------- */
 
 .gear {

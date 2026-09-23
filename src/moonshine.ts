@@ -14,7 +14,8 @@ import type { MicTranscriber, ModelArch, TranscriptLine } from '@moonshine-ai/mo
 
 export type { MicTranscriber, ModelArch, TranscriptLine };
 
-const DEFAULT_MODULE_URL = '/wasm/dist/index.js';
+/** The vendored binding location, also shown by the settings reset button. */
+export const DEFAULT_MODULE_URL = '/wasm/dist/index.js';
 /** Persisted override for where the binding is imported from. */
 const MODULE_URL_KEY = 'moduleUrl';
 
@@ -34,7 +35,8 @@ export function loadModuleUrlPreference(): string {
   return DEFAULT_MODULE_URL;
 }
 
-function saveModuleUrlPreference(url: string): void {
+/** Persists an override for where the binding is imported from. */
+export function saveModuleUrl(url: string): void {
   try {
     localStorage.setItem(MODULE_URL_KEY, url);
   } catch {
@@ -77,5 +79,3 @@ export function loadMoonshine(): Promise<MoonshineModule> {
 export function resetMoonshine(): void {
   cachedModule = undefined;
 }
-
-export { saveModuleUrlPreference as saveModuleUrl };

@@ -1,4 +1,5 @@
 import {
+  DEFAULT_MODULE_URL,
   loadMoonshine,
   loadModuleUrlPreference,
   resetMoonshine,
@@ -8,6 +9,18 @@ import {
   type TranscriptLine,
 } from './moonshine';
 import './style.css';
+
+// --- Types ---------------------------------------------------------------------
+
+type WsState = 'closed' | 'connecting' | 'open';
+type FrameKind = 'partial' | 'final' | 'pause' | 'sys' | 'error';
+type ArchKey = 'tiny' | 'small' | 'medium';
+/** Base URLs for the models that are not bundled with the app. */
+type ModelUrls = Record<Exclude<ArchKey, 'tiny'>, string>;
+/** Keys of the binding's ModelArch enum, e.g. `SmallStreaming`. */
+type ArchName = keyof MoonshineModule['ModelArch'];
+
+// --- Constants -------------------------------------------------------------------
 
 const DEFAULT_WS_URL = 'ws://localhost:9999';
 const QUEUE_LIMIT = 500;
@@ -50,19 +63,50 @@ const MODEL_URL_KEY = 'modelUrls';
 const CDN_BASE = 'https://download.moonshine.ai/model';
 const CDN_REV = 'quantized_26_07_30';
 
-const DEFAULT_MODEL_URLS: Record<Exclude<ArchKey, 'tiny'>, string> = {
+const DEFAULT_MODEL_URLS: ModelUrls = {
   small: `${CDN_BASE}/small-streaming-en/${CDN_REV}`,
   medium: `${CDN_BASE}/medium-streaming-en/${CDN_REV}`,
 };
-/** Shown in the dialog when resetting the binding URL field. */
-const DEFAULT_MODULE_URL = '/wasm/dist/index.js';
+
+// --- localStorage helpers -----------------------------------------------------
+
+/**
+ * localStorage wrappers that degrade gracefully: private mode and disabled
+ * storage throw, and the app treats that as "no preference" everywhere.
+ */
+
+function readStorage(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStorage(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Nothing to do — the value still applies for this session.
+  }
+}
+
+/** Binds a checkbox to a persisted `true`/`false` preference. */
+function bindCheckbox(input: HTMLInputElement, key: string, onChange?: () => void): void {
+  const saved = readStorage(key);
+  if (saved !== null) input.checked = saved === 'true';
+  input.addEventListener('change', () => {
+    writeStorage(key, String(input.checked));
+    onChange?.();
+  });
+}
+
+// --- Model URL preferences -------------------------------------------------------
 
 /** Base URLs for non-bundled models, as persisted in localStorage. */
-function loadModelUrls(): Record<Exclude<ArchKey, 'tiny'>, string> {
+function loadModelUrls(): ModelUrls {
   try {
-    const saved = JSON.parse(localStorage.getItem(MODEL_URL_KEY) ?? '{}') as Partial<
-      Record<Exclude<ArchKey, 'tiny'>, string>
-    >;
+    const saved = JSON.parse(readStorage(MODEL_URL_KEY) ?? '{}') as Partial<ModelUrls>;
     return {
       small: saved.small?.trim() || DEFAULT_MODEL_URLS.small,
       medium: saved.medium?.trim() || DEFAULT_MODEL_URLS.medium,
@@ -72,49 +116,53 @@ function loadModelUrls(): Record<Exclude<ArchKey, 'tiny'>, string> {
   }
 }
 
-function saveModelUrls(urls: Record<Exclude<ArchKey, 'tiny'>, string>): void {
-  try {
-    localStorage.setItem(MODEL_URL_KEY, JSON.stringify(urls));
-  } catch {
-    // Nothing to do — the values still apply for this session.
-  }
+function saveModelUrls(urls: ModelUrls): void {
+  writeStorage(MODEL_URL_KEY, JSON.stringify(urls));
+}
+
+// --- DOM ------------------------------------------------------------------------
+
+/** Looks up a required element, failing fast when the markup and script drift apart. */
+function byId<T extends HTMLElement>(id: string): T {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(`Missing #${id} — index.html and main.ts are out of sync.`);
+  return el as T;
 }
 
 const els = {
-  wsDot: document.getElementById('wsDot') as HTMLSpanElement,
-  wsUrl: document.getElementById('wsUrl') as HTMLInputElement,
-  wsToggle: document.getElementById('wsToggle') as HTMLButtonElement,
-  mic: document.getElementById('mic') as HTMLButtonElement,
-  wsState: document.getElementById('wsState') as HTMLElement,
-  sendEvents: document.getElementById('sendEvents') as HTMLInputElement,
-  sanitize: document.getElementById('sanitize') as HTMLInputElement,
-  streamedOutput: document.getElementById('streamedOutput') as HTMLInputElement,
-  settings: document.getElementById('settings') as HTMLButtonElement,
-  settingsDialog: document.getElementById('settingsDialog') as HTMLDialogElement,
-  settingsSave: document.getElementById('settingsSave') as HTMLButtonElement,
-  settingsCancel: document.getElementById('settingsCancel') as HTMLButtonElement,
-  settingsReset: document.getElementById('settingsReset') as HTMLButtonElement,
-  smallUrl: document.getElementById('smallUrl') as HTMLInputElement,
-  mediumUrl: document.getElementById('mediumUrl') as HTMLInputElement,
-  moduleUrl: document.getElementById('moduleUrl') as HTMLInputElement,
-  micLabel: document.getElementById('micLabel') as HTMLElement,
-  sttStatus: document.getElementById('sttStatus') as HTMLParagraphElement,
-  progress: document.getElementById('progress') as HTMLElement,
-  archChips: document.getElementById('archChips') as HTMLElement,
-  live: document.getElementById('live') as HTMLElement,
-  frames: document.getElementById('frames') as HTMLElement,
+  wsDot: byId<HTMLSpanElement>('wsDot'),
+  wsUrl: byId<HTMLInputElement>('wsUrl'),
+  wsToggle: byId<HTMLButtonElement>('wsToggle'),
+  mic: byId<HTMLButtonElement>('mic'),
+  wsState: byId<HTMLElement>('wsState'),
+  sendEvents: byId<HTMLInputElement>('sendEvents'),
+  sanitize: byId<HTMLInputElement>('sanitize'),
+  streamedOutput: byId<HTMLInputElement>('streamedOutput'),
+  settings: byId<HTMLButtonElement>('settings'),
+  settingsDialog: byId<HTMLDialogElement>('settingsDialog'),
+  settingsSave: byId<HTMLButtonElement>('settingsSave'),
+  settingsCancel: byId<HTMLButtonElement>('settingsCancel'),
+  settingsReset: byId<HTMLButtonElement>('settingsReset'),
+  smallUrl: byId<HTMLInputElement>('smallUrl'),
+  mediumUrl: byId<HTMLInputElement>('mediumUrl'),
+  moduleUrl: byId<HTMLInputElement>('moduleUrl'),
+  micLabel: byId<HTMLElement>('micLabel'),
+  sttStatus: byId<HTMLParagraphElement>('sttStatus'),
+  progress: byId<HTMLElement>('progress'),
+  archChips: byId<HTMLElement>('archChips'),
+  live: byId<HTMLElement>('live'),
+  frames: byId<HTMLElement>('frames'),
 };
 
-// --- WebSocket relay ---------------------------------------------------------
-
-type WsState = 'closed' | 'connecting' | 'open';
-type FrameKind = 'partial' | 'final' | 'pause' | 'sys' | 'error';
+// --- WebSocket relay -------------------------------------------------------------
 
 let ws: WebSocket | null = null;
 let wsState: WsState = 'closed';
 let wasConnected = false;
 /** Set when the user pressed Disconnect; suppresses auto-reconnect. */
 let userStopped = false;
+/** Set when connect() was called while a socket was already up; honored on close. */
+let reconnectOnClose = false;
 /** Frames captured while the socket is down, flushed once it opens. */
 const pending: string[] = [];
 
@@ -140,20 +188,24 @@ function currentWsUrl(): string {
   return els.wsUrl.value.trim() || DEFAULT_WS_URL;
 }
 
-/** True when the last connect attempt failed or the socket dropped on its own. */
-function hadError(): boolean {
+/** True when the app itself may bring the relay back up. */
+function mayReconnect(): boolean {
   return wsState === 'closed' && !userStopped;
 }
 
-/** Renders the "— disconnected" suffix in the error color after a failure. */
+/** Renders the "— retrying" suffix in the error color after a failure. */
 function markWsError(): void {
-  if (!hadError()) return;
+  if (!mayReconnect()) return;
+  els.wsDot.classList.add('dot--error');
   els.wsState.className = 'ws-state ws-state--error';
   els.wsState.textContent = '— retrying every 10 s';
 }
 
 function connect(): void {
   if (wsState !== 'closed') {
+    // Already up or dialing: close the current socket and redial it once the
+    // close completes (e.g. the user pressed Enter with a new URL).
+    reconnectOnClose = true;
     ws?.close();
     return;
   }
@@ -161,26 +213,35 @@ function connect(): void {
   const url = currentWsUrl();
   setWsState('connecting');
   logEvent(`WebSocket: connecting to ${url}…`);
+  let socket: WebSocket;
   try {
-    ws = new WebSocket(url);
+    socket = new WebSocket(url);
   } catch (err) {
     setWsState('closed');
     markWsError();
     logEvent(`WebSocket: invalid URL — ${(err as Error).message}`, 'error');
     return;
   }
-  ws.onopen = () => {
+  ws = socket;
+  socket.onopen = () => {
+    if (ws !== socket) return;
     setWsState('open');
     wasConnected = true;
     logEvent(`WebSocket: connected to ${url}`);
     flushPending();
   };
-  ws.onerror = () => {
+  socket.onerror = () => {
     // onclose always follows; the failure is reported there.
   };
-  ws.onclose = () => {
+  socket.onclose = () => {
+    if (ws !== socket) return; // superseded by a newer connection attempt
     ws = null;
     setWsState('closed');
+    if (reconnectOnClose) {
+      reconnectOnClose = false;
+      connect();
+      return;
+    }
     if (userStopped) {
       if (wasConnected) logEvent('WebSocket: disconnected (by user).');
       else logEvent('WebSocket: connect cancelled.', 'error');
@@ -194,14 +255,16 @@ function connect(): void {
 /** Closes the socket; marks whether this was the user's choice. */
 function disconnect(byUser = true): void {
   if (byUser) userStopped = true;
+  reconnectOnClose = false;
   ws?.close();
-  ws = null;
 }
 
 function flushPending(): void {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   while (pending.length) ws.send(pending.shift()!);
 }
+
+// --- Frame log --------------------------------------------------------------------
 
 function logFrame(kind: FrameKind, text: string): void {
   const row = document.createElement('div');
@@ -222,6 +285,12 @@ function logEvent(text: string, kind: 'sys' | 'error' = 'sys'): void {
   logFrame(kind, text);
 }
 
+function logSeparator(): void {
+  const sep = document.createElement('div');
+  sep.className = 'sep';
+  els.frames.append(sep);
+}
+
 /**
  * Prepares transcribed text for the wire: when the sanitize option is on,
  * lowercases it, removes every non-alphanumeric character, and keeps spaces
@@ -231,7 +300,7 @@ function logEvent(text: string, kind: 'sys' | 'error' = 'sys'): void {
  * `[speechEnded]` are exempt — stripping their punctuation would destroy the
  * markers.
  */
-function sanitizeForWire(text: string, kind: FrameKind): string {
+function sanitizeForWire(text: string): string {
   if (EVENT_FRAMES.has(text)) return text;
   if (!els.sanitize.checked) return text;
   return text
@@ -241,24 +310,13 @@ function sanitizeForWire(text: string, kind: FrameKind): string {
     .trim();
 }
 
-function logSeparator(): void {
-  const sep = document.createElement('div');
-  sep.className = 'sep';
-  els.frames.append(sep);
-}
-
-/** True when the app itself may bring the relay back up. */
-function mayReconnect(): boolean {
-  return wsState === 'closed' && !userStopped;
-}
-
 /**
  * Sends one text frame to the WebSocket server, sanitized per the toggle.
  * Queues while the socket is down (and asks for a reconnect), so
  * transcription never stalls on the connection.
  */
 function sendFrame(kind: FrameKind, rawText: string): void {
-  const text = sanitizeForWire(rawText, kind);
+  const text = sanitizeForWire(rawText);
   if (!text) return;
   if (kind === 'sys') {
     // Local diagnostics only — never queued or sent.
@@ -277,15 +335,22 @@ function sendFrame(kind: FrameKind, rawText: string): void {
   if (mayReconnect()) connect();
 }
 
-// --- Transcription -----------------------------------------------------------
+// --- Transcription -----------------------------------------------------------------
 
-type ArchKey = 'tiny' | 'small' | 'medium';
+interface Arch {
+  key: ArchKey;
+  name: ArchName;
+  label: string;
+}
 
-const ARCHES: { key: ArchKey; name: string; label: string }[] = [
+const ARCHES: Arch[] = [
   { key: 'tiny', name: 'TinyStreaming', label: 'Tiny · fastest' },
   { key: 'small', name: 'SmallStreaming', label: 'Small · balanced' },
   { key: 'medium', name: 'MediumStreaming', label: 'Medium · most accurate' },
 ];
+
+/** Default model size when nothing (valid) is persisted. */
+const DEFAULT_ARCH: ArchKey = 'small';
 
 /** Canonical filenames every streaming model needs. */
 const MODEL_FILES = [
@@ -298,36 +363,8 @@ const MODEL_FILES = [
   'tokenizer.bin',
 ] as const;
 
-/**
- * Maps a model's canonical filenames onto candidate base URLs, tried in
- * order. The tiny model ships with the app; the others are first looked for
- * on the same server (`/models/…`, present when vendored) and then fetched
- * from the base URL configured in the settings dialog.
- */
-function modelUrlCandidates(key: ArchKey): string[] {
-  const bases: string[] = [];
-  if (key === 'tiny') {
-    bases.push('/models/tiny_streaming');
-  } else {
-    bases.push(`/models/${key}_streaming`);
-    bases.push(loadModelUrls()[key]);
-  }
-  return bases;
-}
-
 let Moonshine: MoonshineModule;
-let selectedArch: ArchKey = 'small';
-
-/** Reads the persisted model size, falling back to 'small' if unknown. */
-function loadArchPreference(): ArchKey {
-  try {
-    const saved = localStorage.getItem(MODEL_KEY) as ArchKey | null;
-    if (saved && ARCHES.some((a) => a.key === saved)) return saved;
-  } catch {
-    // Private mode or storage disabled: the default (small) simply applies.
-  }
-  return 'small';
-}
+let selectedArch: ArchKey = DEFAULT_ARCH;
 let mic: MicTranscriber | null = null;
 let micReady: Promise<void> | null = null;
 let loadGeneration = 0;
@@ -335,21 +372,25 @@ let running = false;
 /** Last partial sent, so frames are only pushed when the sentence grows. */
 let lastSent = '';
 
-function sttStatus(text: string, kind?: 'error' | 'ready' | 'info'): void {
+/** Reads the persisted model size, falling back to the default if unknown. */
+function loadArchPreference(): ArchKey {
+  const saved = readStorage(MODEL_KEY) as ArchKey | null;
+  return saved && ARCHES.some((a) => a.key === saved) ? saved : DEFAULT_ARCH;
+}
+
+function setStatus(text: string, kind?: 'error' | 'ready' | 'info'): void {
   els.sttStatus.textContent = text;
   els.sttStatus.dataset.kind = kind ?? '';
 }
 
 function setProgress(fraction: number | null): void {
-  els.progress.classList.toggle('is-active', fraction !== null);
-  els.progress.classList.toggle('is-indeterminate', fraction === null || fraction < 0);
-  if (fraction !== null && fraction >= 0) {
+  const determinate = fraction !== null && fraction >= 0 && fraction < 1;
+  els.progress.classList.toggle('is-active', fraction !== null && fraction < 1);
+  els.progress.classList.toggle('is-indeterminate', !determinate);
+  if (determinate) {
     els.progress.querySelector<HTMLElement>('.progress__bar')!.style.width = `${Math.round(
-      fraction * 100,
+      (fraction as number) * 100,
     )}%`;
-  }
-  if (fraction !== null && fraction >= 1) {
-    els.progress.classList.remove('is-active');
   }
 }
 
@@ -364,7 +405,7 @@ function onPartial(text: string): void {
   if (!trimmed) return;
   // Deduplicate on what actually goes on the wire, so "Hello," followed by
   // "Hello" does not send the sanitized "hello" twice.
-  const wire = sanitizeForWire(trimmed, 'partial');
+  const wire = sanitizeForWire(trimmed);
   if (wire && wire !== lastSent) {
     lastSent = wire;
     sendFrame('partial', trimmed);
@@ -374,10 +415,12 @@ function onPartial(text: string): void {
 /**
  * Sends an event control frame (e.g. `[speechEnded]`) when the "Send Events"
  * toggle is on; silently suppressed otherwise. Sent as a `final` frame so
- * sanitize never mangles the marker.
+ * sanitize never mangles the marker. Returns whether the frame was sent.
  */
-function sendEvent(frame: string): void {
-  if (els.sendEvents.checked) sendFrame('final', frame);
+function sendEvent(frame: string): boolean {
+  if (!els.sendEvents.checked) return false;
+  sendFrame('final', frame);
+  return true;
 }
 
 /**
@@ -391,24 +434,16 @@ function onLine(line: TranscriptLine): void {
   lastSent = '';
   const text = line.text.trim();
   if (text) sendFrame('final', text);
-  if (els.sendEvents.checked) {
-    sendFrame('final', SPEECH_ENDED_FRAME);
-  } else {
-    logFrame('pause', '');
-  }
+  if (!sendEvent(SPEECH_ENDED_FRAME)) logFrame('pause', '');
   logSeparator();
 }
 
-/**
- * Sends the `[enabled]` event frame after the microphone has been enabled.
- */
+/** Sends the `[enabled]` event frame after the microphone has been enabled. */
 function onMicEnabled(): void {
   sendEvent(ENABLED_FRAME);
 }
 
-/**
- * Sends the `[disabled]` event frame after the microphone has been disabled.
- */
+/** Sends the `[disabled]` event frame after the microphone has been disabled. */
 function onMicDisabled(): void {
   sendEvent(DISABLED_FRAME);
 }
@@ -434,19 +469,26 @@ function onOutputStreamingToggled(): void {
 }
 
 /**
+ * Local and remote base URLs for a model's files: the tiny model ships with
+ * the app; the others are first looked for on the same server (`/models/…`,
+ * present when vendored) and then fetched from the URL configured in the
+ * settings dialog.
+ */
+function modelSources(key: ArchKey): { local: string; remote?: string } {
+  if (key === 'tiny') return { local: '/models/tiny_streaming' };
+  return { local: `/models/${key}_streaming`, remote: loadModelUrls()[key] };
+}
+
+/**
  * Decides where each model file comes from: probes the local /models/ path
  * first (streaming models only), falling back to the configured base URL for
  * any file the server does not have. Mixing is fine — the loader just wants a
  * URL per canonical filename.
  */
 async function resolveModelUrls(key: ArchKey): Promise<Record<string, string>> {
-  const bases = modelUrlCandidates(key);
-  const localBase = bases[0];
-  const result: Record<string, string> = {};
-  for (const name of MODEL_FILES) {
-    result[name] = `${bases[bases.length - 1]}/${name}`;
-  }
-  if (bases.length === 1) return result; // bundled model: all local
+  const { local, remote } = modelSources(key);
+  const localUrls = Object.fromEntries(MODEL_FILES.map((name) => [name, `${local}/${name}`]));
+  if (!remote) return localUrls; // bundled model: all local
 
   // Probe each file on the local path; use the remote base for misses. The
   // probe checks the content type because SPA dev servers answer 200 with
@@ -454,7 +496,7 @@ async function resolveModelUrls(key: ArchKey): Promise<Record<string, string>> {
   const probes = await Promise.all(
     MODEL_FILES.map(async (name) => {
       try {
-        const response = await fetch(`${localBase}/${name}`, { method: 'HEAD' });
+        const response = await fetch(`${local}/${name}`, { method: 'HEAD' });
         if (!response.ok) return false;
         const type = response.headers.get('content-type') ?? '';
         return !type.includes('text/html');
@@ -463,43 +505,40 @@ async function resolveModelUrls(key: ArchKey): Promise<Record<string, string>> {
       }
     }),
   );
-  const remoteBase = bases[1];
+  const result = { ...localUrls };
   MODEL_FILES.forEach((name, i) => {
-    if (!probes[i]) result[name] = `${remoteBase}/${name}`;
+    if (!probes[i]) result[name] = `${remote}/${name}`;
   });
   const localCount = probes.filter(Boolean).length;
   if (localCount === MODEL_FILES.length) {
-    logEvent(`Model ${key}: loading from ${localBase} (all files local).`);
+    logEvent(`Model ${key}: loading from ${local} (all files local).`);
   } else if (localCount === 0) {
-    logEvent(`Model ${key}: not on server — loading from ${remoteBase}.`);
+    logEvent(`Model ${key}: not on server — loading from ${remote}.`);
   } else {
     logEvent(
-      `Model ${key}: ${localCount}/${MODEL_FILES.length} files from ${localBase}, ` +
-        `rest from ${remoteBase}.`,
+      `Model ${key}: ${localCount}/${MODEL_FILES.length} files from ${local}, ` +
+        `rest from ${remote}.`,
     );
   }
   return result;
 }
 
-function buildMic(archName: string, key: ArchKey): MicTranscriber {
-  const arch = (Moonshine.ModelArch as unknown as Record<string, number>)[archName];
-  const instance = new Moonshine.MicTranscriber()
-    .modelArch(arch)
+function buildMic(arch: Arch): MicTranscriber {
+  return new Moonshine.MicTranscriber()
+    .modelArch(Moonshine.ModelArch[arch.name])
     .onText(onPartial)
     .onLine(onLine)
-    .onError((error: Error) => sttStatus(error.message, 'error'))
-    .onProgress((fraction: number, _file: string) => setProgress(fraction));
-  // modelsFrom() is applied once the URL map is resolved, right before load().
-  return instance;
+    .onError((error) => setStatus(error.message, 'error'))
+    .onProgress((fraction) => setProgress(fraction));
 }
 
 async function loadModel(): Promise<void> {
   const generation = ++loadGeneration; // a newer selection supersedes this load
   const arch = ARCHES.find((a) => a.key === selectedArch)!;
-  sttStatus(`Loading the ${arch.key} model…`);
+  setStatus(`Loading the ${arch.key} model…`);
   logEvent(`Model ${arch.key}: loading…`);
   setProgress(null);
-  const instance = buildMic(arch.name, arch.key);
+  const instance = buildMic(arch);
   instance.modelsFrom(await resolveModelUrls(arch.key));
   try {
     await instance.load();
@@ -518,7 +557,7 @@ async function loadModel(): Promise<void> {
   logEvent(`Model ${arch.key}: loaded successfully.`);
 }
 
-// --- Microphone states -------------------------------------------------------
+// --- Microphone states ---------------------------------------------------------
 
 /** An error whose {@link Error.name} marks it as a microphone permission denial. */
 function micPermissionError(): Error {
@@ -536,13 +575,13 @@ function isMicPermissionError(err: unknown): boolean {
 /** Model loaded and idle: the mic can be pressed again. */
 function showReadyState(): void {
   els.micLabel.textContent = 'Ready';
-  sttStatus('Model ready - press the mic to start sending', 'ready');
+  setStatus('Model ready - press the mic to start sending', 'ready');
 }
 
 /** Microphone access refused by the user (or previously denied). */
 function showPermissionDeniedState(): void {
   els.micLabel.textContent = 'Failed';
-  sttStatus('The microphone permission was denied', 'error');
+  setStatus('The microphone permission was denied', 'error');
 }
 
 /** The current permission state, falling back to 'prompt' when unqueryable. */
@@ -565,7 +604,7 @@ async function ensureMicPermission(): Promise<void> {
   if (state === 'denied') throw micPermissionError();
   if (state !== 'prompt') return; // already granted
   els.micLabel.textContent = 'Waiting for Microphone Permission...';
-  sttStatus('Authorize the permission dialog to start sending', 'info');
+  setStatus('Authorize the permission dialog to start sending', 'info');
   try {
     // Triggers the browser's permission dialog; the stream is released right
     // away — the transcriber opens its own once permission is granted.
@@ -580,7 +619,7 @@ async function ensureMicPermission(): Promise<void> {
 /** Warm-starts the model download as soon as the page loads. */
 function warmStart(): void {
   micReady = loadModel().catch((err: Error) => {
-    sttStatus(`Model load failed: ${err.message}`, 'error');
+    setStatus(`Model load failed: ${err.message}`, 'error');
   });
 }
 
@@ -607,14 +646,14 @@ async function startListening(): Promise<void> {
     document.body.dataset.state = 'listening';
     els.mic.setAttribute('aria-label', 'Stop listening');
     els.micLabel.textContent = 'Listening';
-    sttStatus('Transcribing', 'ready');
+    setStatus('Transcribing', 'ready');
     onMicEnabled();
   } catch (err) {
     if (isMicPermissionError(err)) {
       showPermissionDeniedState();
     } else {
       els.micLabel.textContent = 'Ready';
-      sttStatus((err as Error).message, 'error');
+      setStatus((err as Error).message, 'error');
     }
   } finally {
     els.mic.disabled = false;
@@ -638,16 +677,12 @@ els.mic.addEventListener('click', () => {
   else void startListening();
 });
 
-// --- Model size chips ----------------------------------------------------------
+// --- Model size chips ------------------------------------------------------------
 
 async function selectArch(key: ArchKey): Promise<void> {
   if (key === selectedArch) return;
   selectedArch = key;
-  try {
-    localStorage.setItem(MODEL_KEY, key);
-  } catch {
-    // Nothing to do — the selection still applies for this session.
-  }
+  writeStorage(MODEL_KEY, key);
   for (const chip of els.archChips.children) {
     chip.classList.toggle('is-active', (chip as HTMLElement).dataset.arch === key);
   }
@@ -671,57 +706,12 @@ function mountArchChips(): void {
 
 // --- Settings ----------------------------------------------------------------------
 
-// Restores the persisted "send events" preference (default: on).
-try {
-  const saved = localStorage.getItem(SEND_EVENTS_KEY);
-  if (saved !== null) els.sendEvents.checked = saved === 'true';
-} catch {
-  // Private mode or storage disabled: the default (on) simply applies.
-}
+// Restores the persisted toggle preferences (checkbox defaults come from the markup).
+bindCheckbox(els.sendEvents, SEND_EVENTS_KEY);
+bindCheckbox(els.sanitize, SANITIZE_KEY, onRemovePunctuationToggled);
+bindCheckbox(els.streamedOutput, STREAMED_OUTPUT_KEY, onOutputStreamingToggled);
 
-els.sendEvents.addEventListener('change', () => {
-  try {
-    localStorage.setItem(SEND_EVENTS_KEY, String(els.sendEvents.checked));
-  } catch {
-    // Nothing to do — the toggle still applies for this session.
-  }
-});
-
-// Restores the persisted sanitize preference (default: off).
-try {
-  const saved = localStorage.getItem(SANITIZE_KEY);
-  if (saved !== null) els.sanitize.checked = saved === 'true';
-} catch {
-  // Private mode or storage disabled: the default (off) simply applies.
-}
-
-els.sanitize.addEventListener('change', () => {
-  try {
-    localStorage.setItem(SANITIZE_KEY, String(els.sanitize.checked));
-  } catch {
-    // Nothing to do — the toggle still applies for this session.
-  }
-  onRemovePunctuationToggled();
-});
-
-// Restores the persisted streamed-output preference (default: on).
-try {
-  const saved = localStorage.getItem(STREAMED_OUTPUT_KEY);
-  if (saved !== null) els.streamedOutput.checked = saved === 'true';
-} catch {
-  // Private mode or storage disabled: the default (on) simply applies.
-}
-
-els.streamedOutput.addEventListener('change', () => {
-  try {
-    localStorage.setItem(STREAMED_OUTPUT_KEY, String(els.streamedOutput.checked));
-  } catch {
-    // Nothing to do — the toggle still applies for this session.
-  }
-  onOutputStreamingToggled();
-});
-
-// --- Settings dialog ---------------------------------------------------------------
+// --- Settings dialog -----------------------------------------------------------------
 
 function openSettings(): void {
   const urls = loadModelUrls();
@@ -763,7 +753,7 @@ els.settingsReset.addEventListener('click', () => {
   els.moduleUrl.value = DEFAULT_MODULE_URL;
 });
 
-// --- WebSocket controls ----------------------------------------------------------
+// --- WebSocket controls ----------------------------------------------------------------
 
 els.wsToggle.addEventListener('click', () => {
   if (wsState === 'closed') connect();
@@ -771,21 +761,19 @@ els.wsToggle.addEventListener('click', () => {
 });
 
 els.wsUrl.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter') {
-    disconnect(false);
-    connect();
-  }
+  // Reconnect (or redial, if currently connected) with the edited URL.
+  if (event.key === 'Enter') connect();
 });
 
 // Retries the relay periodically unless the user explicitly disconnected.
 setInterval(() => {
-  if (wsState === 'closed' && !userStopped) connect();
+  if (mayReconnect()) connect();
 }, RECONNECT_INTERVAL_MS);
 
-// --- Documentation copy buttons ---------------------------------------------------
+// --- Documentation copy buttons ----------------------------------------------------------
 
 /** Shows a transient "Copied!" toast after a copy action. */
-function showToast() {
+function showToast(): void {
   const toast = document.createElement('div');
   toast.className = 'toast';
   toast.textContent = 'Copied!';
@@ -800,10 +788,18 @@ document.querySelectorAll<HTMLButtonElement>('.doc-event-btn').forEach((btn) => 
   });
 });
 
-// --- Startup ------------------------------------------------------------------------
+// --- Startup --------------------------------------------------------------------------------
 
 void (async () => {
-  Moonshine = await loadBinding();
+  try {
+    Moonshine = await loadBinding();
+  } catch {
+    // loadBinding already logged the details to the STATUS panel; make the
+    // failure visible in the mic area instead of dying silently.
+    els.micLabel.textContent = 'Failed';
+    setStatus('The Moonshine binding failed to load', 'error');
+    return;
+  }
   selectedArch = loadArchPreference();
   mountArchChips();
   warmStart();
