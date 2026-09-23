@@ -185,7 +185,7 @@
 
       .opt {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         gap: 0.55rem;
         margin-top: 0.85rem;
         font-size: 0.9rem;
@@ -195,9 +195,18 @@
         width: fit-content;
       }
 
+      .opt > span {
+        color: var(--text);
+      }
+
+      .opt--first {
+        margin-top: 1.75rem;
+      }
+
       .opt input {
         width: 1.05rem;
         height: 1.05rem;
+        margin-top: 0.1rem;
         accent-color: var(--accent);
         cursor: pointer;
       }
@@ -205,6 +214,71 @@
       .opt code {
         font: 0.85em var(--mono);
         color: var(--warn);
+      }
+
+      .opt-sub {
+        display: block;
+        margin-top: 0.2rem;
+        font-size: 0.78rem;
+        font-weight: normal;
+        color: var(--muted);
+        opacity: 0.85;
+      }
+
+      /* --- Documentation ------------------------------------------------------ */
+
+      .doc {
+        margin-top: 0.9rem;
+      }
+
+      .doc summary {
+        cursor: pointer;
+        padding: 0 1.25rem 0 0;
+        font-weight: 600;
+        font-size: 0.95rem;
+        list-style: none;
+        user-select: none;
+        color: var(--muted);
+        transition: color 120ms ease;
+      }
+
+      .doc summary:hover {
+        color: var(--text);
+      }
+
+      .doc summary::-webkit-details-marker,
+      .doc summary::marker {
+        display: none;
+        content: "";
+      }
+
+      .doc summary::before {
+        content: "";
+        display: inline-block;
+        width: 0.38rem;
+        height: 0.38rem;
+        border-right: 1.5px solid var(--faint);
+        border-bottom: 1.5px solid var(--faint);
+        margin-right: 0.5rem;
+        vertical-align: 1px;
+        transform: rotate(-45deg);
+        transition: transform 120ms ease;
+      }
+
+      .doc[open] summary::before {
+        transform: rotate(45deg);
+      }
+
+      .doc ul {
+        margin: 0.25rem 0 0;
+        padding: 0 1.25rem;
+        font-size: 0.9rem;
+        color: var(--muted);
+      }
+
+      .doc code {
+        font: 0.85em var(--mono);
+        color: var(--text);
       }
 
       /* --- Settings gear + dialog -------------------------------------------- */
@@ -435,6 +509,10 @@
         margin-top: 1rem;
       }
 
+      #archChips {
+        margin-top: 0.3rem;
+      }
+
       .chip {
         padding: 0.35rem 0.8rem;
         border: 1px solid var(--line);
@@ -559,14 +637,6 @@
           />
           <button id="wsToggle" class="btn" type="button">Connect</button>
         </div>
-        <label class="opt">
-          <input type="checkbox" id="speechEnded" checked />
-          <span>Send <code>[speechEnded]</code> when speech ends</span>
-        </label>
-        <label class="opt">
-          <input type="checkbox" id="sanitize" />
-          <span>Lowercase and strip non-alphanumerics (spaces kept) from sent frames</span>
-        </label>
       </section>
 
       <dialog id="settingsDialog">
@@ -616,8 +686,41 @@
           </div>
         </div>
         <div class="progress" id="progress"><div class="progress__bar"></div></div>
-        <div class="chips" id="archChips" role="group" aria-label="Model size"></div>
         <div class="live" id="live" aria-live="polite"></div>
+      </section>
+
+      <section>
+        <h2>Settings</h2>
+        <div class="label">Voice Recognition Model:</div>
+        <div class="chips" id="archChips" role="group" aria-label="Model size"></div>
+        <label class="opt opt--first">
+          <input type="checkbox" id="sendEvents" checked />
+          <span>Send Events
+            <small class="opt-sub">Send <code>[eventName]</code> frames. See &quot;Events&quot; below for details.</small>
+          </span>
+        </label>
+        <label class="opt">
+          <input type="checkbox" id="sanitize" />
+          <span>Remove Punctuation
+            <small class="opt-sub">Keep only letters, numbers, and spaces, and lowercase everything before sending.</small>
+          </span>
+        </label>
+        <label class="opt">
+          <input type="checkbox" id="streamedOutput" checked />
+          <span>Streamed Output
+            <small class="opt-sub">Send text as it's recognized, instead of when you stop talking.</small>
+          </span>
+        </label>
+      </section>
+
+      <section>
+        <h2>Documentation</h2>
+        <details class="doc" id="doc-events">
+          <summary>Events</summary>
+          <ul>
+            <li><code>[speechEnded]</code> - Sent whenever the user stops speaking.</li>
+          </ul>
+        </details>
       </section>
 
       <section>

@@ -16,10 +16,12 @@ const FRAME_LOG_LIMIT = 500;
 const RECONNECT_INTERVAL_MS = 10_000;
 /** Text frame sent when the model detects the end of speech, if enabled. */
 const SPEECH_ENDED_FRAME = '[speechEnded]';
-/** Persisted flag: send {@link SPEECH_ENDED_FRAME} on pause? Default on. */
-const SPEECH_ENDED_KEY = 'sendSpeechEnded';
+/** Persisted flag: send event frames (e.g. {@link SPEECH_ENDED_FRAME})? Default on. */
+const SEND_EVENTS_KEY = 'sendEvents';
 /** Persisted flag: lowercase + strip non-alphanumerics from sent frames. */
 const SANITIZE_KEY = 'sanitizeFrames';
+/** Persisted flag: send partial frames as text is recognized? Default on. */
+const STREAMED_OUTPUT_KEY = 'streamedOutput';
 /** Persisted key of the last used model size ({@link ArchKey}). */
 const MODEL_KEY = 'modelArch';
 /** Persisted base URLs for the models not shipped with the app. */
@@ -64,8 +66,9 @@ const els = {
   wsToggle: document.getElementById('wsToggle') as HTMLButtonElement,
   mic: document.getElementById('mic') as HTMLButtonElement,
   wsState: document.getElementById('wsState') as HTMLElement,
-  speechEnded: document.getElementById('speechEnded') as HTMLInputElement,
+  sendEvents: document.getElementById('sendEvents') as HTMLInputElement,
   sanitize: document.getElementById('sanitize') as HTMLInputElement,
+  streamedOutput: document.getElementById('streamedOutput') as HTMLInputElement,
   settings: document.getElementById('settings') as HTMLButtonElement,
   settingsDialog: document.getElementById('settingsDialog') as HTMLDialogElement,
   settingsSave: document.getElementById('settingsSave') as HTMLButtonElement,
@@ -335,6 +338,7 @@ function setProgress(fraction: number | null): void {
  */
 function onPartial(text: string): void {
   els.live.textContent = text;
+  if (!els.streamedOutput.checked) return;
   const trimmed = text.trim();
   if (!trimmed) return;
   // Deduplicate on what actually goes on the wire, so "Hello," followed by
@@ -357,7 +361,7 @@ function onLine(line: TranscriptLine): void {
   lastSent = '';
   const text = line.text.trim();
   if (text) sendFrame('final', text);
-  if (els.speechEnded.checked) {
+  if (els.sendEvents.checked) {
     sendFrame('final', SPEECH_ENDED_FRAME);
   } else {
     logFrame('pause', '');
@@ -538,17 +542,17 @@ function mountArchChips(): void {
 
 // --- Settings ----------------------------------------------------------------------
 
-// Restores the persisted `[speechEnded]` preference (default: on).
+// Restores the persisted "send events" preference (default: on).
 try {
-  const saved = localStorage.getItem(SPEECH_ENDED_KEY);
-  if (saved !== null) els.speechEnded.checked = saved === 'true';
+  const saved = localStorage.getItem(SEND_EVENTS_KEY);
+  if (saved !== null) els.sendEvents.checked = saved === 'true';
 } catch {
   // Private mode or storage disabled: the default (on) simply applies.
 }
 
-els.speechEnded.addEventListener('change', () => {
+els.sendEvents.addEventListener('change', () => {
   try {
-    localStorage.setItem(SPEECH_ENDED_KEY, String(els.speechEnded.checked));
+    localStorage.setItem(SEND_EVENTS_KEY, String(els.sendEvents.checked));
   } catch {
     // Nothing to do — the toggle still applies for this session.
   }
@@ -565,6 +569,22 @@ try {
 els.sanitize.addEventListener('change', () => {
   try {
     localStorage.setItem(SANITIZE_KEY, String(els.sanitize.checked));
+  } catch {
+    // Nothing to do — the toggle still applies for this session.
+  }
+});
+
+// Restores the persisted streamed-output preference (default: on).
+try {
+  const saved = localStorage.getItem(STREAMED_OUTPUT_KEY);
+  if (saved !== null) els.streamedOutput.checked = saved === 'true';
+} catch {
+  // Private mode or storage disabled: the default (on) simply applies.
+}
+
+els.streamedOutput.addEventListener('change', () => {
+  try {
+    localStorage.setItem(STREAMED_OUTPUT_KEY, String(els.streamedOutput.checked));
   } catch {
     // Nothing to do — the toggle still applies for this session.
   }
