@@ -1,0 +1,83 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            asset: resonite-voice-bridge-linux-amd64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            asset: resonite-voice-bridge-linux-arm64
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+            asset: resonite-voice-bridge-darwin-amd64
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            asset: resonite-voice-bridge-darwin-arm64
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            asset: resonite-voice-bridge-windows-amd64.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install frontend dependencies
+        run: npm ci --no-audit --no-fund
+        working-directory: frontend
+
+      - name: Build frontend
+        run: npm run build
+        working-directory: frontend
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Build binary
+        run: |
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -trimpath -o bin/${{ matrix.asset }} ./systray
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: bin/${{ matrix.asset }}
+
+  create-release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Get version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ steps.get_version.outputs.VERSION }}
+          files: |
+            artifacts/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
