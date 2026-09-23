@@ -1,0 +1,13 @@
+module github.com/lixquid/resonite-voice-bridge-v3
+
+go 1.24
+
+require (
+	fyne.io/systray v1.12.2
+	github.com/gorilla/websocket v1.5.3
+)
+
+require (
+	github.com/godbus/dbus/v5 v5.1.0 // indirect
+	golang.org/x/sys v0.15.0 // indirect
+)

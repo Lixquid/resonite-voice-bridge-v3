@@ -27,7 +27,7 @@ interface WordReplacement {
 
 // --- Constants -------------------------------------------------------------------
 
-const DEFAULT_WS_URL = 'ws://localhost:9999';
+const DEFAULT_WS_URL = 'ws://localhost:6789';
 const QUEUE_LIMIT = 500;
 /** Maximum rows kept in the on-page frame log. */
 const FRAME_LOG_LIMIT = 500;
