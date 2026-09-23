@@ -297,6 +297,36 @@
         background: rgba(255, 180, 84, 0.3);
       }
 
+      /* Toast notification */
+      .toast {
+        position: fixed;
+        top: 80px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: var(--good);
+        color: var(--bg);
+        padding: 0.5rem 1rem;
+        border-radius: 4px;
+        font-size: 0.9rem;
+        z-index: 1000;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        animation: toastIn 0.3s ease, toastOut 0.3s ease 2.5s forwards;
+      }
+
+      @keyframes toastIn {
+        from { opacity: 0; transform: translateX(-50%) scale(0.9); }
+        to { opacity: 1; transform: translateX(-50%) scale(1); }
+      }
+
+      @keyframes toastOut {
+        from { opacity: 1; transform: translateX(-50%) scale(1); }
+        to { opacity: 0; transform: translateX(-50%) scale(0.9); }
+      }
+
+      .toast.hidden {
+        display: none;
+      }
+
       /* --- Settings gear + dialog -------------------------------------------- */
 
       .gear {
@@ -765,9 +795,18 @@
 
     <script type="module" src="/src/main.ts"></script>
     <script>
+      function showToast() {
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.textContent = 'Copied!';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+      }
+
       document.querySelectorAll('.doc-event-btn').forEach((btn) => {
         btn.addEventListener('click', () => {
           navigator.clipboard.writeText(btn.getAttribute('data-event'));
+          showToast();
         });
       });
     </script>
