@@ -286,6 +286,12 @@ button {
   background: rgba(255, 180, 84, 0.3);
 }
 
+.doc-hint {
+  margin: 0.35rem 0 0;
+  padding: 0 1.25rem;
+  font-size: 0.9rem;
+}
+
 /* Toast notification */
 .toast {
   position: fixed;
@@ -632,6 +638,11 @@ body[data-state="listening"] .mic__stop {
 .frame--sys .msg {
   color: var(--faint);
   font-style: italic;
+}
+
+.frame--cmd .msg {
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .frame--error .msg {

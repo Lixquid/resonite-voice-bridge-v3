@@ -57,6 +57,15 @@ Are you well?
   punctuation removal feature has been enabled or disabled, and
   `[outputStreamingEnabled]`/`[outputStreamingDisabled]` when the output
   streaming feature has been enabled or disabled.
+- Commands are incoming messages over the WebSocket relay that change how the
+  bridge functions (toggle/enable/disable the microphone, and toggle the
+  punctuation removal and output streaming settings — the full list lives in
+  `COMMANDS.md` and is documented in the app's Documentation panel). They are
+  only honored while the "Enable Commands" setting (persisted, default on) is
+  active; otherwise each arriving command is noted in the log and ignored.
+  Recognized commands appear in the frame log in the accent color, setting
+  changes they make send the usual event frames, and unknown commands are
+  logged as errors.
 - The WebSocket defaults to `ws://localhost:9999` (editable in the UI). Frames
   are queued while the socket is down and flushed once it connects, so
   transcription never stalls on the connection.

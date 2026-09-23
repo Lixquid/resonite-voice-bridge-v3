@@ -13,7 +13,7 @@ import './style.css';
 // --- Types ---------------------------------------------------------------------
 
 type WsState = 'closed' | 'connecting' | 'open';
-type FrameKind = 'partial' | 'final' | 'pause' | 'sys' | 'error';
+type FrameKind = 'partial' | 'final' | 'pause' | 'sys' | 'error' | 'cmd';
 type ArchKey = 'tiny' | 'small' | 'medium';
 /** Base URLs for the models that are not bundled with the app. */
 type ModelUrls = Record<Exclude<ArchKey, 'tiny'>, string>;
@@ -55,6 +55,8 @@ const SEND_EVENTS_KEY = 'sendEvents';
 const SANITIZE_KEY = 'sanitizeFrames';
 /** Persisted flag: send partial frames as text is recognized? Default on. */
 const STREAMED_OUTPUT_KEY = 'streamedOutput';
+/** Persisted flag: honor commands arriving over the relay? Default on. */
+const ENABLE_COMMANDS_KEY = 'enableCommands';
 /** Persisted key of the last used model size ({@link ArchKey}). */
 const MODEL_KEY = 'modelArch';
 /** Persisted base URLs for the models not shipped with the app. */
@@ -138,6 +140,7 @@ const els = {
   sendEvents: byId<HTMLInputElement>('sendEvents'),
   sanitize: byId<HTMLInputElement>('sanitize'),
   streamedOutput: byId<HTMLInputElement>('streamedOutput'),
+  enableCommands: byId<HTMLInputElement>('enableCommands'),
   settings: byId<HTMLButtonElement>('settings'),
   settingsDialog: byId<HTMLDialogElement>('settingsDialog'),
   settingsSave: byId<HTMLButtonElement>('settingsSave'),
@@ -229,6 +232,9 @@ function connect(): void {
     wasConnected = true;
     logEvent(`WebSocket: connected to ${url}`);
     flushPending();
+  };
+  socket.onmessage = (event) => {
+    onCommand(String(event.data));
   };
   socket.onerror = () => {
     // onclose always follows; the failure is reported there.
@@ -466,6 +472,85 @@ function onOutputStreamingToggled(): void {
   sendEvent(
     els.streamedOutput.checked ? OUTPUT_STREAMING_ENABLED_FRAME : OUTPUT_STREAMING_DISABLED_FRAME,
   );
+}
+
+// --- Commands -----------------------------------------------------------------------
+
+/**
+ * A command received over the WebSocket relay (see COMMANDS.md). Only honored
+ * while the "Enable Commands" setting is on; anything else arriving on the
+ * socket is ignored with a note in the log.
+ */
+function onCommand(rawCommand: string): void {
+  const command = rawCommand.trim();
+  if (!command) return;
+  if (!els.enableCommands.checked) {
+    logEvent(`Command ignored (commands disabled): ${command}`);
+    return;
+  }
+  logFrame('cmd', command);
+  if (!runCommand(command)) {
+    logEvent(`Unknown command: ${command}`, 'error');
+  }
+}
+
+/**
+ * Applies a setting toggle from a command: updates the checkbox, persists the
+ * preference, and fires the change callback (which sends the corresponding
+ * event frame). A no-op when the state already matches, so redundant
+ * commands do not spam the relay with event frames.
+ */
+function setToggle(
+  input: HTMLInputElement,
+  checked: boolean,
+  key: string,
+  onChange: () => void,
+): void {
+  if (input.checked === checked) return;
+  input.checked = checked;
+  writeStorage(key, String(checked));
+  onChange();
+}
+
+/** Runs one relay command; returns whether it was recognized. */
+function runCommand(command: string): boolean {
+  switch (command) {
+    case 'toggle':
+      if (running) void stopListening();
+      else void startListening();
+      return true;
+    case 'enable':
+      if (!running) void startListening();
+      return true;
+    case 'disable':
+      if (running) void stopListening();
+      return true;
+    case 'removePunctuationToggle':
+      setToggle(els.sanitize, !els.sanitize.checked, SANITIZE_KEY, onRemovePunctuationToggled);
+      return true;
+    case 'removePunctuationEnable':
+      setToggle(els.sanitize, true, SANITIZE_KEY, onRemovePunctuationToggled);
+      return true;
+    case 'removePunctuationDisable':
+      setToggle(els.sanitize, false, SANITIZE_KEY, onRemovePunctuationToggled);
+      return true;
+    case 'outputStreamingToggle':
+      setToggle(
+        els.streamedOutput,
+        !els.streamedOutput.checked,
+        STREAMED_OUTPUT_KEY,
+        onOutputStreamingToggled,
+      );
+      return true;
+    case 'outputStreamingEnable':
+      setToggle(els.streamedOutput, true, STREAMED_OUTPUT_KEY, onOutputStreamingToggled);
+      return true;
+    case 'outputStreamingDisable':
+      setToggle(els.streamedOutput, false, STREAMED_OUTPUT_KEY, onOutputStreamingToggled);
+      return true;
+    default:
+      return false;
+  }
 }
 
 /**
@@ -710,6 +795,7 @@ function mountArchChips(): void {
 bindCheckbox(els.sendEvents, SEND_EVENTS_KEY);
 bindCheckbox(els.sanitize, SANITIZE_KEY, onRemovePunctuationToggled);
 bindCheckbox(els.streamedOutput, STREAMED_OUTPUT_KEY, onOutputStreamingToggled);
+bindCheckbox(els.enableCommands, ENABLE_COMMANDS_KEY);
 
 // --- Settings dialog -----------------------------------------------------------------
 

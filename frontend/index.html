@@ -111,6 +111,12 @@
             <small class="opt-sub">Send text as it's recognized, instead of when you stop talking.</small>
           </span>
         </label>
+        <label class="opt">
+          <input type="checkbox" id="enableCommands" checked />
+          <span>Enable Commands
+            <small class="opt-sub">Let the WebSocket relay control this bridge by sending commands. See &quot;Commands&quot; below for details.</small>
+          </span>
+        </label>
       </section>
 
       <section>
@@ -125,6 +131,21 @@
             <li><button type="button" class="doc-event-btn" data-event="[removePunctuationDisabled]">[removePunctuationDisabled]</button> - Sent when the punctuation removal feature has been disabled.</li>
             <li><button type="button" class="doc-event-btn" data-event="[outputStreamingEnabled]">[outputStreamingEnabled]</button> - Sent when the output streaming feature has been enabled.</li>
             <li><button type="button" class="doc-event-btn" data-event="[outputStreamingDisabled]">[outputStreamingDisabled]</button> - Sent when the output streaming feature has been disabled.</li>
+          </ul>
+        </details>
+        <details class="doc" id="doc-commands">
+          <summary>Commands</summary>
+          <p class="doc-hint">Incoming messages over the WebSocket relay that change how the bridge functions. Only honored while the "Enable Commands" setting is on.</p>
+          <ul>
+            <li><button type="button" class="doc-event-btn" data-event="toggle">toggle</button> - Toggles the microphone on and off.</li>
+            <li><button type="button" class="doc-event-btn" data-event="enable">enable</button> - Enables the microphone.</li>
+            <li><button type="button" class="doc-event-btn" data-event="disable">disable</button> - Disables the microphone.</li>
+            <li><button type="button" class="doc-event-btn" data-event="removePunctuationToggle">removePunctuationToggle</button> - Toggles the punctuation removal on and off.</li>
+            <li><button type="button" class="doc-event-btn" data-event="removePunctuationEnable">removePunctuationEnable</button> - Enables the punctuation removal.</li>
+            <li><button type="button" class="doc-event-btn" data-event="removePunctuationDisable">removePunctuationDisable</button> - Disables the punctuation removal.</li>
+            <li><button type="button" class="doc-event-btn" data-event="outputStreamingToggle">outputStreamingToggle</button> - Toggles the output streaming on and off.</li>
+            <li><button type="button" class="doc-event-btn" data-event="outputStreamingEnable">outputStreamingEnable</button> - Enables the output streaming.</li>
+            <li><button type="button" class="doc-event-btn" data-event="outputStreamingDisable">outputStreamingDisable</button> - Disables the output streaming.</li>
           </ul>
         </details>
       </section>
