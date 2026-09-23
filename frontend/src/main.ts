@@ -19,6 +19,11 @@ type ArchKey = 'tiny' | 'small' | 'medium';
 type ModelUrls = Record<Exclude<ArchKey, 'tiny'>, string>;
 /** Keys of the binding's ModelArch enum, e.g. `SmallStreaming`. */
 type ArchName = keyof MoonshineModule['ModelArch'];
+/** A word to replace in outgoing voice text, and what to replace it with. */
+interface WordReplacement {
+  target: string;
+  replacement: string;
+}
 
 // --- Constants -------------------------------------------------------------------
 
@@ -39,6 +44,9 @@ const REMOVE_PUNCTUATION_DISABLED_FRAME = '[removePunctuationDisabled]';
 /** Event frames sent when the output streaming toggle changes. */
 const OUTPUT_STREAMING_ENABLED_FRAME = '[outputStreamingEnabled]';
 const OUTPUT_STREAMING_DISABLED_FRAME = '[outputStreamingDisabled]';
+/** Event frames sent when the word replacement toggle changes. */
+const REPLACEMENT_ENABLED_FRAME = '[replacementEnabled]';
+const REPLACEMENT_DISABLED_FRAME = '[replacementDisabled]';
 /** All event frames — sanitize is bypassed so these markers stay intact. */
 const EVENT_FRAMES = new Set([
   SPEECH_ENDED_FRAME,
@@ -48,6 +56,8 @@ const EVENT_FRAMES = new Set([
   REMOVE_PUNCTUATION_DISABLED_FRAME,
   OUTPUT_STREAMING_ENABLED_FRAME,
   OUTPUT_STREAMING_DISABLED_FRAME,
+  REPLACEMENT_ENABLED_FRAME,
+  REPLACEMENT_DISABLED_FRAME,
 ]);
 /** Persisted flag: send event frames (e.g. {@link SPEECH_ENDED_FRAME})? Default on. */
 const SEND_EVENTS_KEY = 'sendEvents';
@@ -57,6 +67,10 @@ const SANITIZE_KEY = 'sanitizeFrames';
 const STREAMED_OUTPUT_KEY = 'streamedOutput';
 /** Persisted flag: honor commands arriving over the relay? Default on. */
 const ENABLE_COMMANDS_KEY = 'enableCommands';
+/** Persisted flag: swap words per the replacement list before sending? */
+const WORD_REPLACEMENT_KEY = 'wordReplacement';
+/** Persisted JSON list of {@link WordReplacement} entries. */
+const WORD_REPLACEMENTS_KEY = 'wordReplacements';
 /** Persisted key of the last used model size ({@link ArchKey}). */
 const MODEL_KEY = 'modelArch';
 /** Persisted base URLs for the models not shipped with the app. */
@@ -122,6 +136,93 @@ function saveModelUrls(urls: ModelUrls): void {
   writeStorage(MODEL_URL_KEY, JSON.stringify(urls));
 }
 
+// --- Word Replacement panel ---------------------------------------------------
+
+/** Reads the persisted replacement entries, tolerating malformed storage. */
+function loadReplacements(): WordReplacement[] {
+  try {
+    const saved = JSON.parse(readStorage(WORD_REPLACEMENTS_KEY) ?? '[]');
+    if (!Array.isArray(saved)) return [];
+    return saved.map((entry) => ({
+      target: String(entry?.target ?? ''),
+      replacement: String(entry?.replacement ?? ''),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/** Persists the current replacement entries. */
+function saveReplacements(entries: WordReplacement[]): void {
+  writeStorage(WORD_REPLACEMENTS_KEY, JSON.stringify(entries));
+}
+
+/** Reads the entries back out of the panel, so unsaved edits are live. */
+function collectReplacements(): WordReplacement[] {
+  return [...els.wrList.querySelectorAll<HTMLDivElement>('.wr-row')].map((row) => ({
+    target: row.querySelector<HTMLInputElement>('.wr-target')!.value,
+    replacement: row.querySelector<HTMLInputElement>('.wr-replacement')!.value,
+  }));
+}
+
+/** Persists the panel contents whenever an entry is edited or removed. */
+function onReplacementsChanged(): void {
+  saveReplacements(collectReplacements());
+}
+
+/** Builds one editable entry row (target → replacement, with a delete x). */
+function buildReplacementRow(entry: WordReplacement): HTMLDivElement {
+  const row = document.createElement('div');
+  row.className = 'wr-row';
+
+  const target = document.createElement('input');
+  target.type = 'text';
+  target.className = 'wr-target';
+  target.placeholder = 'Target word';
+  target.setAttribute('aria-label', 'Target word');
+  target.value = entry.target;
+
+  const arrow = document.createElement('span');
+  arrow.className = 'wr-arrow';
+  arrow.textContent = '→';
+  arrow.setAttribute('aria-hidden', 'true');
+
+  const replacement = document.createElement('input');
+  replacement.type = 'text';
+  replacement.className = 'wr-replacement';
+  replacement.placeholder = 'Replacement word';
+  replacement.setAttribute('aria-label', 'Replacement word');
+  replacement.value = entry.replacement;
+
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'wr-remove';
+  remove.textContent = '✕';
+  remove.setAttribute('aria-label', 'Delete entry');
+  remove.title = 'Delete entry';
+  remove.addEventListener('click', () => {
+    row.remove();
+    onReplacementsChanged();
+  });
+
+  // Every keystroke persists, so the list survives a reload mid-edit.
+  target.addEventListener('input', onReplacementsChanged);
+  replacement.addEventListener('input', onReplacementsChanged);
+
+  row.append(target, arrow, replacement, remove);
+  return row;
+}
+
+/** Rebuilds the entry list from localStorage. */
+function renderReplacements(): void {
+  els.wrList.replaceChildren(...loadReplacements().map(buildReplacementRow));
+}
+
+/** Shows the panel only while the toggle is on. */
+function updateWordReplacementPanel(): void {
+  els.wrPanel.hidden = !els.wordReplacement.checked;
+}
+
 // --- DOM ------------------------------------------------------------------------
 
 /** Looks up a required element, failing fast when the markup and script drift apart. */
@@ -141,6 +242,10 @@ const els = {
   sanitize: byId<HTMLInputElement>('sanitize'),
   streamedOutput: byId<HTMLInputElement>('streamedOutput'),
   enableCommands: byId<HTMLInputElement>('enableCommands'),
+  wordReplacement: byId<HTMLInputElement>('wordReplacement'),
+  wrPanel: byId<HTMLElement>('wrPanel'),
+  wrList: byId<HTMLElement>('wrList'),
+  wrAdd: byId<HTMLButtonElement>('wrAdd'),
   settings: byId<HTMLButtonElement>('settings'),
   settingsDialog: byId<HTMLDialogElement>('settingsDialog'),
   settingsSave: byId<HTMLButtonElement>('settingsSave'),
@@ -298,18 +403,63 @@ function logSeparator(): void {
 }
 
 /**
+ * Escapes a string for literal use inside a RegExp.
+ */
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Copies the case shape of a matched word onto its replacement: an
+ * all-uppercase match comes back all-uppercase, a capitalized match comes
+ * back capitalized, and an exact-case match keeps the replacement as typed.
+ */
+function matchCase(source: string, replacement: string): string {
+  if (!replacement) return replacement;
+  if (source === replacement) return replacement;
+  const letters = source.replace(/[^\p{L}]/gu, '');
+  if (letters && letters === letters.toUpperCase()) return replacement.toUpperCase();
+  if (/^\p{Lu}/u.test(source)) {
+    return replacement.charAt(0).toUpperCase() + replacement.slice(1);
+  }
+  return replacement;
+}
+
+/**
+ * Swaps every whole-word occurrence of a target for its replacement,
+ * case-insensitively but case-preserving (see {@link matchCase}). Runs only
+ * while the "Word Replacement" toggle is on; blank targets are skipped.
+ */
+function applyWordReplacements(text: string): string {
+  if (!els.wordReplacement.checked) return text;
+  const entries = collectReplacements().filter((e) => e.target.trim());
+  if (!entries.length) return text;
+  let result = text;
+  for (const { target, replacement } of entries) {
+    const pattern = new RegExp(
+      `(?<![\\p{L}\\p{N}])${escapeRegExp(target.trim())}(?![\\p{L}\\p{N}])`,
+      'giu',
+    );
+    result = result.replace(pattern, (matched) => matchCase(matched, replacement));
+  }
+  return result;
+}
+
+/**
  * Prepares transcribed text for the wire: when the sanitize option is on,
  * lowercases it, removes every non-alphanumeric character, and keeps spaces
  * as the only whitespace — other whitespace (tabs, newlines) is dropped, and
  * runs of spaces collapse to one with none at the edges. Unicode-aware, so
- * accented letters and digits survive. Event control frames such as
- * `[speechEnded]` are exempt — stripping their punctuation would destroy the
- * markers.
+ * accented letters and digits survive. Word replacement runs first so the
+ * replacements are sanitized like the rest of the text. Event control frames
+ * such as `[speechEnded]` are exempt — stripping their punctuation would
+ * destroy the markers — and diagnostics are never replaced.
  */
-function sanitizeForWire(text: string): string {
+function sanitizeForWire(text: string, kind: FrameKind = 'final'): string {
   if (EVENT_FRAMES.has(text)) return text;
-  if (!els.sanitize.checked) return text;
-  return text
+  let out = kind === 'sys' ? text : applyWordReplacements(text);
+  if (!els.sanitize.checked) return out;
+  return out
     .toLowerCase()
     .replace(/[^\p{L}\p{N} ]+/gu, '')
     .replace(/ {2,}/g, ' ')
@@ -411,7 +561,7 @@ function onPartial(text: string): void {
   if (!trimmed) return;
   // Deduplicate on what actually goes on the wire, so "Hello," followed by
   // "Hello" does not send the sanitized "hello" twice.
-  const wire = sanitizeForWire(trimmed);
+  const wire = sanitizeForWire(trimmed, 'partial');
   if (wire && wire !== lastSent) {
     lastSent = wire;
     sendFrame('partial', trimmed);
@@ -472,6 +622,14 @@ function onOutputStreamingToggled(): void {
   sendEvent(
     els.streamedOutput.checked ? OUTPUT_STREAMING_ENABLED_FRAME : OUTPUT_STREAMING_DISABLED_FRAME,
   );
+}
+
+/**
+ * Sends the `[replacementEnabled]` / `[replacementDisabled]` event frame
+ * whenever the word replacement toggle changes.
+ */
+function onWordReplacementToggled(): void {
+  sendEvent(els.wordReplacement.checked ? REPLACEMENT_ENABLED_FRAME : REPLACEMENT_DISABLED_FRAME);
 }
 
 // --- Commands -----------------------------------------------------------------------
@@ -547,6 +705,20 @@ function runCommand(command: string): boolean {
       return true;
     case 'outputStreamingDisable':
       setToggle(els.streamedOutput, false, STREAMED_OUTPUT_KEY, onOutputStreamingToggled);
+      return true;
+    case 'replacementToggle':
+      setToggle(
+        els.wordReplacement,
+        !els.wordReplacement.checked,
+        WORD_REPLACEMENT_KEY,
+        onWordReplacementToggled,
+      );
+      return true;
+    case 'replacementEnable':
+      setToggle(els.wordReplacement, true, WORD_REPLACEMENT_KEY, onWordReplacementToggled);
+      return true;
+    case 'replacementDisable':
+      setToggle(els.wordReplacement, false, WORD_REPLACEMENT_KEY, onWordReplacementToggled);
       return true;
     default:
       return false;
@@ -796,6 +968,15 @@ bindCheckbox(els.sendEvents, SEND_EVENTS_KEY);
 bindCheckbox(els.sanitize, SANITIZE_KEY, onRemovePunctuationToggled);
 bindCheckbox(els.streamedOutput, STREAMED_OUTPUT_KEY, onOutputStreamingToggled);
 bindCheckbox(els.enableCommands, ENABLE_COMMANDS_KEY);
+bindCheckbox(els.wordReplacement, WORD_REPLACEMENT_KEY);
+els.wordReplacement.addEventListener('change', updateWordReplacementPanel);
+els.wrAdd.addEventListener('click', () => {
+  els.wrList.append(buildReplacementRow({ target: '', replacement: '' }));
+  onReplacementsChanged();
+  els.wrList.lastElementChild?.querySelector<HTMLInputElement>('.wr-target')?.focus();
+});
+renderReplacements();
+updateWordReplacementPanel();
 
 // --- Settings dialog -----------------------------------------------------------------
 

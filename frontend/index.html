@@ -117,6 +117,23 @@
             <small class="opt-sub">Let the WebSocket relay control this bridge by sending commands. See &quot;Commands&quot; below for details.</small>
           </span>
         </label>
+        <label class="opt">
+          <input type="checkbox" id="wordReplacement" />
+          <span>Word Replacement
+            <small class="opt-sub">Swap words for replacements before they are sent over the WebSocket. Manage the list in the panel below.</small>
+          </span>
+        </label>
+      </section>
+
+      <section id="wrPanel" hidden>
+        <h2>Word Replacement</h2>
+        <p class="wr-hint">
+          Every occurrence of a target word in the voice text is replaced with
+          its replacement before sending. Matching ignores case; the
+          replacement follows the case of the matched word.
+        </p>
+        <div class="wr-list" id="wrList"></div>
+        <button id="wrAdd" class="btn btn--accent" type="button">+ Add Entry</button>
       </section>
 
       <section>
@@ -131,6 +148,8 @@
             <li><button type="button" class="doc-event-btn" data-event="[removePunctuationDisabled]">[removePunctuationDisabled]</button> - Sent when the punctuation removal feature has been disabled.</li>
             <li><button type="button" class="doc-event-btn" data-event="[outputStreamingEnabled]">[outputStreamingEnabled]</button> - Sent when the output streaming feature has been enabled.</li>
             <li><button type="button" class="doc-event-btn" data-event="[outputStreamingDisabled]">[outputStreamingDisabled]</button> - Sent when the output streaming feature has been disabled.</li>
+            <li><button type="button" class="doc-event-btn" data-event="[replacementEnabled]">[replacementEnabled]</button> - Sent when the word replacement feature has been enabled.</li>
+            <li><button type="button" class="doc-event-btn" data-event="[replacementDisabled]">[replacementDisabled]</button> - Sent when the word replacement feature has been disabled.</li>
           </ul>
         </details>
         <details class="doc" id="doc-commands">
@@ -146,6 +165,9 @@
             <li><button type="button" class="doc-event-btn" data-event="outputStreamingToggle">outputStreamingToggle</button> - Toggles the output streaming on and off.</li>
             <li><button type="button" class="doc-event-btn" data-event="outputStreamingEnable">outputStreamingEnable</button> - Enables the output streaming.</li>
             <li><button type="button" class="doc-event-btn" data-event="outputStreamingDisable">outputStreamingDisable</button> - Disables the output streaming.</li>
+            <li><button type="button" class="doc-event-btn" data-event="replacementToggle">replacementToggle</button> - Toggles the word replacement on and off.</li>
+            <li><button type="button" class="doc-event-btn" data-event="replacementEnable">replacementEnable</button> - Enables the word replacement.</li>
+            <li><button type="button" class="doc-event-btn" data-event="replacementDisable">replacementDisable</button> - Disables the word replacement.</li>
           </ul>
         </details>
       </section>
