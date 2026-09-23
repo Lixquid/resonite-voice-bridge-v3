@@ -450,6 +450,7 @@ async function loadModel(): Promise<void> {
   mic = instance;
   setProgress(1);
   els.mic.disabled = false;
+  if (!running) els.micLabel.textContent = 'Start listening';
   logEvent(`Model ${arch.key}: loaded successfully.`);
   sttStatus('Model ready — press the mic and start talking.', 'ready');
 }
