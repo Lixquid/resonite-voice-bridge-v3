@@ -3,8 +3,11 @@
 # Runs on every commit (all branches) and on pull requests, verifying both
 # projects:
 #
-#   - frontend: typechecks with tsc and builds with Vite.
-#   - systray:  vets, builds and tests the Go module.
+#   - frontend: typechecks with tsc and builds with Vite. The build output
+#     (frontend/dist) is uploaded as an artifact for the systray job.
+#   - systray:  vets, builds and tests the Go module, embedding the frontend
+#     dist produced by the frontend job (it is not committed: it lives in
+#     the frontend's .gitignore).
 
 name: ci
 
@@ -36,11 +39,28 @@ jobs:
       - name: Typecheck and build
         run: npm run build
 
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          # A single path: the artifact archive root is frontend/dist itself,
+          # so downloading into frontend/dist restores the exact layout that
+          # frontend/embed.go expects.
+          path: frontend/dist
+          retention-days: 1
+
   systray:
     name: Systray
+    needs: frontend
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Download frontend build output
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
 
       - uses: actions/setup-go@v5
         with:
@@ -53,7 +73,5 @@ jobs:
       - name: Test
         run: go test ./...
 
-      # The frontend dist is committed, so the embed (see frontend/embed.go)
-      # resolves without building the frontend here.
       - name: Build
         run: go build -trimpath -o bin/resonite-voice-bridge ./systray
