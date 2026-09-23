@@ -1,5 +1,8 @@
 import {
   loadMoonshine,
+  loadModuleUrlPreference,
+  resetMoonshine,
+  saveModuleUrl,
   type MicTranscriber,
   type MoonshineModule,
   type TranscriptLine,
@@ -29,6 +32,8 @@ const DEFAULT_MODEL_URLS: Record<Exclude<ArchKey, 'tiny'>, string> = {
   small: `${CDN_BASE}/small-streaming-en/${CDN_REV}`,
   medium: `${CDN_BASE}/medium-streaming-en/${CDN_REV}`,
 };
+/** Shown in the dialog when resetting the binding URL field. */
+const DEFAULT_MODULE_URL = '/wasm/dist/index.js';
 
 /** Base URLs for non-bundled models, as persisted in localStorage. */
 function loadModelUrls(): Record<Exclude<ArchKey, 'tiny'>, string> {
@@ -68,6 +73,7 @@ const els = {
   settingsReset: document.getElementById('settingsReset') as HTMLButtonElement,
   smallUrl: document.getElementById('smallUrl') as HTMLInputElement,
   mediumUrl: document.getElementById('mediumUrl') as HTMLInputElement,
+  moduleUrl: document.getElementById('moduleUrl') as HTMLInputElement,
   micLabel: document.getElementById('micLabel') as HTMLElement,
   sttStatus: document.getElementById('sttStatus') as HTMLParagraphElement,
   progress: document.getElementById('progress') as HTMLElement,
@@ -79,7 +85,7 @@ const els = {
 // --- WebSocket relay ---------------------------------------------------------
 
 type WsState = 'closed' | 'connecting' | 'open';
-type FrameKind = 'partial' | 'final' | 'pause' | 'sys';
+type FrameKind = 'partial' | 'final' | 'pause' | 'sys' | 'error';
 
 let ws: WebSocket | null = null;
 let wsState: WsState = 'closed';
@@ -131,26 +137,34 @@ function connect(): void {
   userStopped = false;
   const url = currentWsUrl();
   setWsState('connecting');
+  logEvent(`WebSocket: connecting to ${url}…`);
   try {
     ws = new WebSocket(url);
   } catch (err) {
     setWsState('closed');
     markWsError();
-    console.error(`Invalid WebSocket URL: ${(err as Error).message}`);
+    logEvent(`WebSocket: invalid URL — ${(err as Error).message}`, 'error');
     return;
   }
   ws.onopen = () => {
     setWsState('open');
     wasConnected = true;
+    logEvent(`WebSocket: connected to ${url}`);
     flushPending();
   };
   ws.onerror = () => {
-    // onclose always follows; the closed-state render handles the message.
+    // onclose always follows; the failure is reported there.
   };
   ws.onclose = () => {
     ws = null;
     setWsState('closed');
-    markWsError();
+    if (userStopped) {
+      if (wasConnected) logEvent('WebSocket: disconnected (by user).');
+      else logEvent('WebSocket: connect cancelled.', 'error');
+    } else {
+      markWsError();
+      logEvent('WebSocket: connection failed or dropped — retrying every 10 s.', 'error');
+    }
   };
 }
 
@@ -178,6 +192,11 @@ function logFrame(kind: FrameKind, text: string): void {
   els.frames.append(row);
   while (els.frames.childElementCount > FRAME_LOG_LIMIT) els.frames.firstElementChild?.remove();
   els.frames.scrollTop = els.frames.scrollHeight;
+}
+
+/** Logs a lifecycle event (WebSocket, model, binding) to the STATUS panel. */
+function logEvent(text: string, kind: 'sys' | 'error' = 'sys'): void {
+  logFrame(kind, text);
 }
 
 /**
@@ -381,10 +400,16 @@ async function resolveModelUrls(key: ArchKey): Promise<Record<string, string>> {
     if (!probes[i]) result[name] = `${remoteBase}/${name}`;
   });
   const localCount = probes.filter(Boolean).length;
-  console.info(
-    `[${key}_streaming] ${localCount}/${MODEL_FILES.length} files served locally` +
-      (localCount < MODEL_FILES.length ? `, rest from ${remoteBase}` : ''),
-  );
+  if (localCount === MODEL_FILES.length) {
+    logEvent(`Model ${key}: loading from ${localBase} (all files local).`);
+  } else if (localCount === 0) {
+    logEvent(`Model ${key}: not on server — loading from ${remoteBase}.`);
+  } else {
+    logEvent(
+      `Model ${key}: ${localCount}/${MODEL_FILES.length} files from ${localBase}, ` +
+        `rest from ${remoteBase}.`,
+    );
+  }
   return result;
 }
 
@@ -404,10 +429,16 @@ async function loadModel(): Promise<void> {
   const generation = ++loadGeneration; // a newer selection supersedes this load
   const arch = ARCHES.find((a) => a.key === selectedArch)!;
   sttStatus(`Loading the ${arch.key} model…`);
+  logEvent(`Model ${arch.key}: loading…`);
   setProgress(null);
   const instance = buildMic(arch.name, arch.key);
   instance.modelsFrom(await resolveModelUrls(arch.key));
-  await instance.load();
+  try {
+    await instance.load();
+  } catch (err) {
+    logEvent(`Model ${arch.key}: load failed — ${(err as Error).message}`, 'error');
+    throw err;
+  }
   if (generation !== loadGeneration) {
     instance.close();
     return;
@@ -415,6 +446,7 @@ async function loadModel(): Promise<void> {
   mic = instance;
   setProgress(1);
   els.mic.disabled = false;
+  logEvent(`Model ${arch.key}: loaded successfully.`);
   sttStatus('Model ready — press the mic and start talking.', 'ready');
 }
 
@@ -423,6 +455,17 @@ function warmStart(): void {
   micReady = loadModel().catch((err: Error) => {
     sttStatus(`Model load failed: ${err.message}`, 'error');
   });
+}
+
+/** Loads the Moonshine binding; only failures are logged. */
+async function loadBinding(): Promise<MoonshineModule> {
+  const url = loadModuleUrlPreference();
+  try {
+    return await loadMoonshine();
+  } catch (err) {
+    logEvent(`Binding: failed to load from ${url} — ${(err as Error).message}`, 'error');
+    throw err;
+  }
 }
 
 async function startListening(): Promise<void> {
@@ -533,6 +576,7 @@ function openSettings(): void {
   const urls = loadModelUrls();
   els.smallUrl.value = urls.small;
   els.mediumUrl.value = urls.medium;
+  els.moduleUrl.value = loadModuleUrlPreference();
   els.settingsDialog.showModal();
 }
 
@@ -542,10 +586,19 @@ els.settingsSave.addEventListener('click', () => {
   const small = els.smallUrl.value.trim() || DEFAULT_MODEL_URLS.small;
   const medium = els.mediumUrl.value.trim() || DEFAULT_MODEL_URLS.medium;
   saveModelUrls({ small, medium });
+
+  // Re-target the binding if its URL changed; reload everything it affects.
+  const moduleUrl = els.moduleUrl.value.trim();
+  const bindingChanged = moduleUrl !== loadModuleUrlPreference();
+  if (bindingChanged) {
+    saveModuleUrl(moduleUrl);
+    resetMoonshine();
+    mic?.close();
+    mic = null;
+  }
   els.settingsDialog.close();
   // A pending/running model load may now point somewhere else: reload it.
-  if (!running && mic) {
-    mic.close();
+  if (!running && (mic || bindingChanged)) {
     mic = null;
     warmStart();
   }
@@ -556,6 +609,7 @@ els.settingsCancel.addEventListener('click', () => els.settingsDialog.close());
 els.settingsReset.addEventListener('click', () => {
   els.smallUrl.value = DEFAULT_MODEL_URLS.small;
   els.mediumUrl.value = DEFAULT_MODEL_URLS.medium;
+  els.moduleUrl.value = DEFAULT_MODULE_URL;
 });
 
 // --- WebSocket controls ----------------------------------------------------------
@@ -580,7 +634,7 @@ setInterval(() => {
 // --- Startup ------------------------------------------------------------------------
 
 void (async () => {
-  Moonshine = await loadMoonshine();
+  Moonshine = await loadBinding();
   selectedArch = loadArchPreference();
   mountArchChips();
   warmStart();

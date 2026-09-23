@@ -215,7 +215,8 @@
         width: 2rem;
         height: 2rem;
         padding: 0;
-        margin: 0 0 0.75rem;
+        margin: 0.25rem 0 0;
+        margin-left: auto; /* right-align under the panels */
         border: 1px solid var(--line);
         border-radius: 8px;
         background: transparent;
@@ -485,7 +486,7 @@
       }
 
       .frames:empty::after {
-        content: "Sent WebSocket frames will appear here.";
+        content: "Connection, model, and frame events will appear here.";
         color: var(--faint);
         font-family: system-ui;
       }
@@ -518,6 +519,10 @@
       .frame--sys .msg {
         color: var(--faint);
         font-style: italic;
+      }
+
+      .frame--error .msg {
+        color: var(--bad);
       }
 
       .frames .sep {
@@ -564,20 +569,14 @@
         </label>
       </section>
 
-      <button id="settings" class="gear" type="button" aria-label="Settings" title="Settings">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
-             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="3" />
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
-        </svg>
-      </button>
-
       <dialog id="settingsDialog">
         <h3>Model locations</h3>
         <p class="hint">
           The tiny model ships with the app. If a small or medium model is
           found on the server it is used from disk; otherwise it is downloaded
           from these URLs (Moonshine CDN by default) and cached in the browser.
+          The binding itself can also be loaded from another host that serves
+          the <code>dist</code> files (see TODO.txt for server requirements).
         </p>
         <div class="field">
           <label for="smallUrl">Small model base URL</label>
@@ -586,6 +585,10 @@
         <div class="field">
           <label for="mediumUrl">Medium model base URL</label>
           <input id="mediumUrl" type="text" spellcheck="false" />
+        </div>
+        <div class="field">
+          <label for="moduleUrl">Moonshine binding URL (index.js)</label>
+          <input id="moduleUrl" type="text" spellcheck="false" />
         </div>
         <div class="actions">
           <button id="settingsReset" class="btn" type="button">Reset to defaults</button>
@@ -618,9 +621,17 @@
       </section>
 
       <section>
-        <h2>Sent frames</h2>
+        <h2>Status</h2>
         <div class="frames" id="frames"></div>
       </section>
+
+      <button id="settings" class="gear" type="button" aria-label="Settings" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+        </svg>
+      </button>
     </main>
 
     <script type="module" src="/src/main.ts"></script>
