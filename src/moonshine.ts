@@ -45,14 +45,31 @@ function saveModuleUrlPreference(url: string): void {
 let cachedModule: Promise<MoonshineModule> | undefined;
 
 /**
- * Dynamically imports the Moonshine binding (memoized). The specifier is
- * computed at runtime and annotated @vite-ignore: the binding is a public-dir
- * asset that must never go through Vite's transform pipeline.
+ * An indirect dynamic import, created through the Function constructor so
+ * that bundlers and dev servers cannot statically analyze — and rewrite —
+ * the specifier. Vite's import analysis otherwise appends `?import` and runs
+ * the request through its transform pipeline, which rejects files under
+ * public/ ("should not be imported from source code"). The binding must be
+ * served as-is, so it must stay invisible to the bundler.
+ *
+ * A direct `import(/* @vite-ignore * / url)` is kept as a fallback for pages
+ * with a strict CSP (unsafe-eval disabled), where `new Function` is blocked;
+ * in that case the @vite-ignore annotation is relied upon instead.
  */
+const opaqueImport = (() => {
+  try {
+    return new Function(
+      'specifier',
+      'return import(specifier);',
+    ) as (specifier: string) => Promise<MoonshineModule>;
+  } catch {
+    return (specifier: string) => import(/* @vite-ignore */ specifier);
+  }
+})();
+
+/** Dynamically imports the Moonshine binding (memoized). */
 export function loadMoonshine(): Promise<MoonshineModule> {
-  cachedModule ??= import(
-    /* @vite-ignore */ loadModuleUrlPreference()
-  ) as Promise<MoonshineModule>;
+  cachedModule ??= opaqueImport(loadModuleUrlPreference());
   return cachedModule;
 }
 

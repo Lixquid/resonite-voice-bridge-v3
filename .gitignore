@@ -146,3 +146,7 @@ vite.config.ts.timestamp-*
 # see README "Local assets")
 public/models/small_streaming/
 public/models/medium_streaming/
+
+# Don't ignore the vendored files
+!public/wasm/dist/                                                                    
+!public/wasm/dist/**
