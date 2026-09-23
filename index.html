@@ -276,9 +276,25 @@
         color: var(--muted);
       }
 
-      .doc code {
+      .doc code,
+      .doc-event-btn {
         font: 0.85em var(--mono);
-        color: var(--text);
+        color: var(--warn);
+        background: none;
+        border: none;
+        padding: 0.05rem 0.25rem;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: background 120ms ease;
+      }
+
+      .doc code:hover,
+      .doc-event-btn:hover {
+        background: rgba(255, 180, 84, 0.15);
+      }
+
+      .doc-event-btn:active {
+        background: rgba(255, 180, 84, 0.3);
       }
 
       /* --- Settings gear + dialog -------------------------------------------- */
@@ -722,13 +738,13 @@
         <details class="doc" id="doc-events">
           <summary>Events</summary>
           <ul>
-            <li><code>[speechEnded]</code> - Sent whenever the user stops speaking.</li>
-            <li><code>[enabled]</code> - Sent when the microphone has been enabled.</li>
-            <li><code>[disabled]</code> - Sent when the microphone has been disabled.</li>
-            <li><code>[removePunctuationEnabled]</code> - Sent when the punctuation removal feature has been enabled.</li>
-            <li><code>[removePunctuationDisabled]</code> - Sent when the punctuation removal feature has been disabled.</li>
-            <li><code>[outputStreamingEnabled]</code> - Sent when the output streaming feature has been enabled.</li>
-            <li><code>[outputStreamingDisabled]</code> - Sent when the output streaming feature has been disabled.</li>
+            <li><button type="button" class="doc-event-btn" data-event="[speechEnded]">[speechEnded]</button> - Sent whenever the user stops speaking.</li>
+            <li><button type="button" class="doc-event-btn" data-event="[enabled]">[enabled]</button> - Sent when the microphone has been enabled.</li>
+            <li><button type="button" class="doc-event-btn" data-event="[disabled]">[disabled]</button> - Sent when the microphone has been disabled.</li>
+            <li><button type="button" class="doc-event-btn" data-event="[removePunctuationEnabled]">[removePunctuationEnabled]</button> - Sent when the punctuation removal feature has been enabled.</li>
+            <li><button type="button" class="doc-event-btn" data-event="[removePunctuationDisabled]">[removePunctuationDisabled]</button> - Sent when the punctuation removal feature has been disabled.</li>
+            <li><button type="button" class="doc-event-btn" data-event="[outputStreamingEnabled]">[outputStreamingEnabled]</button> - Sent when the output streaming feature has been enabled.</li>
+            <li><button type="button" class="doc-event-btn" data-event="[outputStreamingDisabled]">[outputStreamingDisabled]</button> - Sent when the output streaming feature has been disabled.</li>
           </ul>
         </details>
       </section>
@@ -748,5 +764,12 @@
     </main>
 
     <script type="module" src="/src/main.ts"></script>
+    <script>
+      document.querySelectorAll('.doc-event-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          navigator.clipboard.writeText(btn.getAttribute('data-event'));
+        });
+      });
+    </script>
   </body>
 </html>
