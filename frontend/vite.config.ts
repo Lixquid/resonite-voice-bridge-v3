@@ -6,6 +6,28 @@ import { defineConfig, type Plugin } from 'vite';
 const CONFIG_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 /**
+ * Version stamped into index.html (the %VERSION% placeholder). The Makefile
+ * sets APP_VERSION to the git-derived version it also embeds into the Go
+ * binary, so the frontend and the systray app always report the same version.
+ * Falls back to package.json for bare `npm run dev`/`npm run build`.
+ */
+const APP_VERSION =
+  process.env.APP_VERSION ??
+  JSON.parse(await readFile(path.join(CONFIG_DIR, 'package.json'), 'utf8'))
+    .version;
+
+function stampVersion(): Plugin {
+  return {
+    name: 'stamp-version',
+    // Applied to index.html in both dev and build; returning the transformed
+    // string keeps everything else about the HTML untouched.
+    transformIndexHtml(html) {
+      return html.replace('%VERSION%', APP_VERSION);
+    },
+  };
+}
+
+/**
  * Serves the vendored Moonshine binding from public/wasm/dist as raw files,
  * ahead of Vite's module pipeline. The binding is loaded with a runtime
  * dynamic `import('/wasm/dist/index.js')` (never bundled); without this
@@ -58,7 +80,7 @@ function serveVendoredWasm(): Plugin {
 // support degrades to single-threaded when SharedArrayBuffer is unavailable
 // (verified against this exact build).
 export default defineConfig({
-  plugins: [serveVendoredWasm()],
+  plugins: [serveVendoredWasm(), stampVersion()],
   server: {
     port: 8080,
     strictPort: true,

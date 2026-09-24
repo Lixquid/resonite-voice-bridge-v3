@@ -18,7 +18,8 @@ SYSO_FILES := $(addprefix $(SYSTRAY_DIR)/rsrc_windows_,$(addsuffix .syso,$(SYSO_
 # Compute the embedded application version: the tag naming HEAD when present
 # (e.g. "v1.2.3"), otherwise the short commit ID; "-dirty" is appended when
 # there are uncommitted changes. Injected with -ldflags -X (see
-# systray/version.go). Falls back to Go's VCS stamping when git is absent.
+# systray/version.go) and passed to the frontend build as APP_VERSION (see
+# frontend/vite.config.ts). Falls back to Go's VCS stamping when git is absent.
 VERSION := $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
 ifneq ($(shell git tag --points-at HEAD 2>/dev/null | grep -E '^v' | head -1),)
 VERSION := $(shell git tag --points-at HEAD 2>/dev/null | grep -E '^v' | head -1)
@@ -73,8 +74,10 @@ frontend-install:
 	cd $(FRONTEND_DIR) && npm ci --no-audit --no-fund
 
 # Build the frontend into frontend/dist (this is what gets embedded).
+# APP_VERSION carries the same git-derived VERSION that gets embedded into
+# the Go binary, so the UI footer matches `resonite-voice-bridge --version`.
 frontend: frontend-install
-	cd $(FRONTEND_DIR) && npm run build
+	cd $(FRONTEND_DIR) && APP_VERSION="$(VERSION)" npm run build
 
 # Compile systray/icon.ico into Windows resource objects (one per GOARCH) so
 # the built .exe carries the application icon in Explorer, the taskbar, and
