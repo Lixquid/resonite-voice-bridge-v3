@@ -43,9 +43,15 @@ ifeq ($(GOOS_TARGET),windows)
 GO_LDFLAGS += -H=windowsgui
 OUTPUT := $(OUTPUT).exe
 endif
-.PHONY: all build frontend frontend-install resources clean
+.PHONY: all build frontend frontend-install resources vet test clean
 
 all: build
+
+vet:
+	go vet ./...
+
+test:
+	go test ./...
 
 # Install the frontend's npm dependencies (skipped if already present).
 frontend-install:

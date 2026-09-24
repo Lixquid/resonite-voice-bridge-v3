@@ -1,13 +1,11 @@
 # Continuous integration for Resonite Voice Bridge.
 #
-# Runs on every commit (all branches) and on pull requests, verifying both
-# projects:
-#
-#   - frontend: typechecks with tsc and builds with Vite. The build output
-#     (frontend/dist) is uploaded as an artifact for the systray job.
-#   - systray:  vets, builds and tests the Go module, embedding the frontend
-#     dist produced by the frontend job (it is not committed: it lives in
-#     the frontend's .gitignore).
+# Runs on every commit (all branches) and on pull requests. Everything is
+# driven through the Makefile: `make vet` and `make test` check the Go module,
+# and `make build` builds the frontend (tsc + Vite) and then the Go binary,
+# embedding the frontend dist and the version string (short commit ID plus
+# "-dirty" when the tree is unclean; checkout yields a clean tree, so CI
+# builds embed the short SHA).
 
 name: ci
 
@@ -16,12 +14,9 @@ on:
   pull_request:
 
 jobs:
-  frontend:
-    name: Frontend
+  build:
+    name: Build
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
 
@@ -31,55 +26,23 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-
-      # `npm run build` runs `tsc --noEmit` (typecheck) followed by the
-      # Vite production build.
-      - name: Typecheck and build
-        run: npm run build
-
-      - name: Upload build output
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-dist
-          # A single path: the artifact archive root is frontend/dist itself,
-          # so downloading into frontend/dist restores the exact layout that
-          # frontend/embed.go expects.
-          path: frontend/dist
-          retention-days: 1
-
-  systray:
-    name: Systray
-    needs: frontend
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download frontend build output
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: frontend/dist
-
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
       - name: Vet
-        run: go vet ./...
+        run: make vet
 
       - name: Test
-        run: go test ./...
+        run: make test
 
-      # Embed the version (short commit ID plus -dirty when applicable),
-      # matching the Makefile logic in systray/version.go.
       - name: Build
-        run: |
-          VERSION="$(git rev-parse --short HEAD)"
-          if [ -n "$(git status --porcelain)" ]; then
-            VERSION="${VERSION}-dirty"
-          fi
-          echo "==> Embedding version: $VERSION"
-          go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o bin/resonite-voice-bridge ./systray
+        run: make build
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: resonite-voice-bridge
+          path: bin/resonite-voice-bridge
+          retention-days: 1

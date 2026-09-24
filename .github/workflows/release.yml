@@ -1,3 +1,12 @@
+# Release builds for Resonite Voice Bridge.
+#
+# Triggered by pushing a "v*" tag. Each matrix entry cross-compiles one
+# platform via the Makefile, which handles everything: frontend install and
+# build, version embedding (it picks up the tag name itself via
+# `git tag --points-at HEAD`), Windows resource compilation (application
+# icon), and -H=windowsgui linking for Windows builds. The built binary is
+# then renamed to the release asset name and collected into a GitHub release.
+
 name: Release
 
 on:
@@ -36,34 +45,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install frontend dependencies
-        run: npm ci --no-audit --no-fund
-        working-directory: frontend
-
-      - name: Build frontend
-        run: npm run build
-        working-directory: frontend
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      # Embed the tag name as the version, matching the Makefile logic in
-      # systray/version.go. Windows builds are linked with -H=windowsgui so
-      # no console window opens when the application is launched; the app is
-      # a systray program and must run without a visible terminal.
-      - name: Build binary
-        run: |
-          VERSION="${GITHUB_REF#refs/tags/}"
-          LDFLAGS="-s -w -X main.version=$VERSION"
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            LDFLAGS="$LDFLAGS -H=windowsgui"
-          fi
-          echo "==> Embedding version: $VERSION (ldflags: $LDFLAGS)"
-          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
-            go build -trimpath -ldflags "$LDFLAGS" \
-            -o bin/${{ matrix.asset }} ./systray
+      # Cross-compile: the Makefile honours GOOS/GOARCH, switches the output
+      # to bin/resonite-voice-bridge(.exe) and adds -H=windowsgui (plus the
+      # rsrc icon resources) for Windows targets.
+      - name: Build
+        run: make build GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }}
+
+      - name: Rename asset
+        run: mv bin/resonite-voice-bridge* ${{ matrix.asset }}
+        working-directory: bin
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
