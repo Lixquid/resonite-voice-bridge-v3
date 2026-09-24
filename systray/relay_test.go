@@ -114,3 +114,26 @@ func TestFrontendServing(t *testing.T) {
 		t.Errorf("GET / did not serve index.html: %.200s", body)
 	}
 }
+
+// TestMoonshineModuleMimeType verifies that the vendored Moonshine binding is
+// served with a JavaScript MIME type. Browsers refuse to execute ES modules
+// with any other type, which would silently break the model load. On Windows
+// the system registry can override the builtin .mjs type with "text/plain"
+// (see mimeOverrides in server.go), so the header must be pinned explicitly.
+func TestMoonshineModuleMimeType(t *testing.T) {
+	server := startTestServer(t)
+
+	resp, err := http.Get(server.URL + "/wasm/dist/moonshine.mjs")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("GET /wasm/dist/moonshine.mjs: status %d, want 200", resp.StatusCode)
+	}
+	ct := resp.Header.Get("Content-Type")
+	if !strings.Contains(ct, "javascript") {
+		t.Errorf("GET /wasm/dist/moonshine.mjs: Content-Type %q, want a JavaScript MIME type", ct)
+	}
+}
