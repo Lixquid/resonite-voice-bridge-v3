@@ -61,7 +61,11 @@ all: build
 vet: | $(DIST_MARKER)
 	go vet ./...
 
-test: | $(DIST_MARKER)
+# Tests exercise the embedded frontend (see systray/relay_test.go), so the
+# frontend must be built first: a fresh checkout only has dist/.gitkeep, and
+# every static-file test would 404. `frontend` is phony, so `make test` always
+# picks up the current frontend sources.
+test: frontend
 	go test ./...
 
 # Install the frontend's npm dependencies (skipped if already present).
