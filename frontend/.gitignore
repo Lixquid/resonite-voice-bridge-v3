@@ -80,7 +80,11 @@ out
 
 # Nuxt.js build / generate output
 .nuxt
-dist
+# Build output, except for the placeholder that keeps the directory present
+# in git so `go:embed all:dist` (frontend/embed.go) compiles on a fresh
+# checkout before the frontend has been built.
+dist/*
+!dist/.gitkeep
 .output
 
 # Gatsby files

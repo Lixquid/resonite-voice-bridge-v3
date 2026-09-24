@@ -43,14 +43,25 @@ ifeq ($(GOOS_TARGET),windows)
 GO_LDFLAGS += -H=windowsgui
 OUTPUT := $(OUTPUT).exe
 endif
+# Marker file that keeps frontend/dist present in git (see
+# frontend/.gitignore) so `go:embed all:dist` compiles even on a fresh
+# checkout before the frontend has been built.
+DIST_MARKER := $(FRONTEND_DIR)/dist/.gitkeep
+
+$(DIST_MARKER):
+	mkdir -p $(dir $@)
+	touch $@
+
 .PHONY: all build frontend frontend-install resources vet test clean
 
 all: build
 
-vet:
+# The marker is an order-only prerequisite: it guarantees dist exists so
+# `go vet`/`go test` compile frontend/embed.go, but never triggers a rebuild.
+vet: | $(DIST_MARKER)
 	go vet ./...
 
-test:
+test: | $(DIST_MARKER)
 	go test ./...
 
 # Install the frontend's npm dependencies (skipped if already present).
