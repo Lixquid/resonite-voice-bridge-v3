@@ -63,7 +63,7 @@ jobs:
         run: make build GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }}
 
       - name: Rename asset
-        run: mv bin/resonite-voice-bridge* ${{ matrix.asset }}
+        run: mv resonite-voice-bridge* ${{ matrix.asset }}
         working-directory: bin
 
       - name: Upload artifact
