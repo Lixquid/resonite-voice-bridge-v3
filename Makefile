@@ -6,7 +6,6 @@
 FRONTEND_DIR := frontend
 OUTPUT_DIR   := bin
 OUTPUT       := $(OUTPUT_DIR)/resonite-voice-bridge
-
 # Compute the embedded application version: the tag naming HEAD when present
 # (e.g. "v1.2.3"), otherwise the short commit ID; "-dirty" is appended when
 # there are uncommitted changes. Injected with -ldflags -X (see
@@ -19,6 +18,22 @@ ifneq ($(shell git status --porcelain 2>/dev/null),)
 VERSION := $(VERSION)-dirty
 endif
 GO_LDFLAGS := -s -w -X main.version=$(VERSION)
+
+# On Windows, link as a GUI application (-H=windowsgui) so that launching the
+# binary does not open a console window: the app lives in the system tray and
+# has no use for a visible terminal.
+#
+# Check the *target* OS (GOOS), not the host: `GOOS=windows make` on Linux
+# produces a Windows binary that needs windowsgui too. `OS=Windows_NT` is only
+# set natively on Windows, so use it as a fallback when GOOS isn't overridden.
+GOOS_TARGET := $(shell go env GOOS 2>/dev/null)
+ifneq ($(GOOS),)
+GOOS_TARGET := $(GOOS)
+endif
+ifeq ($(GOOS_TARGET),windows)
+GO_LDFLAGS += -H=windowsgui
+OUTPUT := $(OUTPUT).exe
+endif
 
 .PHONY: all build frontend frontend-install clean
 

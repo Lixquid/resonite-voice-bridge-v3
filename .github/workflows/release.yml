@@ -50,13 +50,19 @@ jobs:
           cache-dependency-path: go.sum
 
       # Embed the tag name as the version, matching the Makefile logic in
-      # systray/version.go.
+      # systray/version.go. Windows builds are linked with -H=windowsgui so
+      # no console window opens when the application is launched; the app is
+      # a systray program and must run without a visible terminal.
       - name: Build binary
         run: |
           VERSION="${GITHUB_REF#refs/tags/}"
-          echo "==> Embedding version: $VERSION"
+          LDFLAGS="-s -w -X main.version=$VERSION"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            LDFLAGS="$LDFLAGS -H=windowsgui"
+          fi
+          echo "==> Embedding version: $VERSION (ldflags: $LDFLAGS)"
           GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
-            go build -trimpath -ldflags "-s -w -X main.version=$VERSION" \
+            go build -trimpath -ldflags "$LDFLAGS" \
             -o bin/${{ matrix.asset }} ./systray
 
       - name: Upload artifact
