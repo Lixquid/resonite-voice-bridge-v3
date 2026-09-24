@@ -39,6 +39,22 @@ header h1 {
   margin: 0 0 0.35rem;
   font-size: clamp(1.5rem, 4vw, 2rem);
   letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+header h1 .logo {
+  height: 1em;
+  width: 1em;
+  flex: none;
+}
+
+header h1 .version {
+  font-size: 0.45em;
+  font-weight: 500;
+  color: var(--faint);
+  margin-left: 0;
 }
 
 header p {
@@ -47,11 +63,7 @@ header p {
 }
 
 header .version {
-  font-size: 0.45em;
-  font-weight: 500;
-  color: var(--faint);
   vertical-align: middle;
-  margin-left: 0.5rem;
 }
 
 section {
