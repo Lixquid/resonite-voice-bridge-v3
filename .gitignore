@@ -1,2 +1,5 @@
 # Go build output
 bin/
+
+# Generated Windows resource objects (embedded application icon)
+systray/*.syso
