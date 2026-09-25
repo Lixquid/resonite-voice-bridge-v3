@@ -58,6 +58,19 @@ func onReady() {
 	mVersion := systray.AddMenuItem("Version: "+appVersion(), "Embedded application version")
 	mVersion.Disable()
 
+	// Toggleable entry controlling whether the web interface is opened in
+	// the browser on every start. The choice is persisted in the user's
+	// configuration directory (see settings.go) so it survives restarts.
+	cfg := loadSettings(mustSettingsPath())
+	mAutoStart := systray.AddMenuItemCheckbox("Auto-start Web Interface",
+		"Open http://localhost:"+listenPort+" in your browser at startup",
+		cfg.AutoStart)
+	if cfg.AutoStart {
+		// The HTTP server is already listening at this point (see main), so
+		// opening the browser immediately is safe.
+		openBrowser("http://localhost:" + listenPort)
+	}
+
 	mOpen := systray.AddMenuItem("Open Web Interface", "Open http://localhost:"+listenPort+" in your browser")
 
 	// Informational entry showing how many clients are currently connected
@@ -79,6 +92,18 @@ func onReady() {
 	go func() {
 		for {
 			select {
+			case <-mAutoStart.ClickedCh:
+				// Checkbox menu item: the systray library does not flip the
+				// check mark itself, so the new state is both stored and
+				// reflected in the menu here.
+				go func() {
+					saveSettings(mustSettingsPath(), settings{AutoStart: !mAutoStart.Checked()})
+				}()
+				if mAutoStart.Checked() {
+					mAutoStart.Uncheck()
+				} else {
+					mAutoStart.Check()
+				}
 			case <-mOpen.ClickedCh:
 				openBrowser("http://localhost:" + listenPort)
 			case <-mQuit.ClickedCh:
@@ -91,4 +116,15 @@ func onReady() {
 
 func onExit() {
 	// Nothing to clean up: the process is exiting anyway.
+}
+
+// mustSettingsPath returns the settings file location, terminating the
+// process only if the operating system cannot provide a configuration
+// directory at all. Without one, no persistent preferences are possible.
+func mustSettingsPath() string {
+	path, err := settingsPath()
+	if err != nil {
+		log.Fatalf("Cannot determine settings location: %v", err)
+	}
+	return path
 }
