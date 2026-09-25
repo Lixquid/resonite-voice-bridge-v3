@@ -51,14 +51,15 @@ Are you well?
   by `Hello` sends once. It never mangles the event control frames (see
   below).
 - Event frames are sent when the "Send Events" toggle is on:
-  `[speechEnded]` after each final frame, `[enabled]` when the microphone has
-  been enabled, `[disabled]` when the microphone has been disabled,
+  `[speechEnded]` after each final frame, `[enabled]` when transcription has
+  been enabled, `[disabled]` when transcription has been disabled,
   `[removePunctuationEnabled]`/`[removePunctuationDisabled]` when the
   punctuation removal feature has been enabled or disabled, and
   `[outputStreamingEnabled]`/`[outputStreamingDisabled]` when the output
   streaming feature has been enabled or disabled.
 - Commands are incoming messages over the WebSocket relay that change how the
-  bridge functions (toggle/enable/disable the microphone, and toggle the
+  bridge functions (toggle the microphone, enable/disable transcription, and
+  toggle the
   punctuation removal and output streaming settings — the full list lives in
   `COMMANDS.md` and is documented in the app's Documentation panel). They are
   only honored while the "Enable Commands" setting (persisted, default on) is

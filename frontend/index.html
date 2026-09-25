@@ -143,8 +143,8 @@
           <summary>Events</summary>
           <ul>
             <li><button type="button" class="doc-event-btn" data-event="[speechEnded]">[speechEnded]</button> - Sent whenever the user stops speaking.</li>
-            <li><button type="button" class="doc-event-btn" data-event="[enabled]">[enabled]</button> - Sent when the microphone has been enabled.</li>
-            <li><button type="button" class="doc-event-btn" data-event="[disabled]">[disabled]</button> - Sent when the microphone has been disabled.</li>
+            <li><button type="button" class="doc-event-btn" data-event="[enabled]">[enabled]</button> - Sent when transcription has been enabled.</li>
+            <li><button type="button" class="doc-event-btn" data-event="[disabled]">[disabled]</button> - Sent when transcription has been disabled.</li>
             <li><button type="button" class="doc-event-btn" data-event="[removePunctuationEnabled]">[removePunctuationEnabled]</button> - Sent when the punctuation removal feature has been enabled.</li>
             <li><button type="button" class="doc-event-btn" data-event="[removePunctuationDisabled]">[removePunctuationDisabled]</button> - Sent when the punctuation removal feature has been disabled.</li>
             <li><button type="button" class="doc-event-btn" data-event="[outputStreamingEnabled]">[outputStreamingEnabled]</button> - Sent when the output streaming feature has been enabled.</li>
@@ -158,8 +158,8 @@
           <p class="doc-hint">Incoming messages over the WebSocket relay that change how the bridge functions. Only honored while the "Enable Commands" setting is on.</p>
           <ul>
             <li><button type="button" class="doc-event-btn" data-event="toggle">toggle</button> - Toggles the microphone on and off.</li>
-            <li><button type="button" class="doc-event-btn" data-event="enable">enable</button> - Enables the microphone.</li>
-            <li><button type="button" class="doc-event-btn" data-event="disable">disable</button> - Disables the microphone.</li>
+            <li><button type="button" class="doc-event-btn" data-event="enable">enable</button> - Enables transcription (starts the microphone if needed, otherwise resumes sending frames).</li>
+            <li><button type="button" class="doc-event-btn" data-event="disable">disable</button> - Disables transcription (the microphone stays live; no frames are sent until the next enable).</li>
             <li><button type="button" class="doc-event-btn" data-event="removePunctuationToggle">removePunctuationToggle</button> - Toggles the punctuation removal on and off.</li>
             <li><button type="button" class="doc-event-btn" data-event="removePunctuationEnable">removePunctuationEnable</button> - Enables the punctuation removal.</li>
             <li><button type="button" class="doc-event-btn" data-event="removePunctuationDisable">removePunctuationDisable</button> - Disables the punctuation removal.</li>

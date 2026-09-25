@@ -525,6 +525,12 @@ let mic: MicTranscriber | null = null;
 let micReady: Promise<void> | null = null;
 let loadGeneration = 0;
 let running = false;
+/**
+ * False while a `disable` command has suppressed transcription output: the
+ * microphone and transcriber keep running, but nothing goes on the wire
+ * until an `enable` command (or a fresh start) lifts the suppression.
+ */
+let sending = true;
 /** Last partial sent, so frames are only pushed when the sentence grows. */
 let lastSent = '';
 
@@ -555,8 +561,8 @@ function setProgress(fraction: number | null): void {
  * sends the continually expanding sentence over the WebSocket.
  */
 function onPartial(text: string): void {
-  els.live.textContent = text;
-  if (!els.streamedOutput.checked) return;
+  els.live.textContent = sending ? text : '';
+  if (!sending || !els.streamedOutput.checked) return;
   const trimmed = text.trim();
   if (!trimmed) return;
   // Deduplicate on what actually goes on the wire, so "Hello," followed by
@@ -588,6 +594,12 @@ function sendEvent(frame: string): boolean {
 function onLine(line: TranscriptLine): void {
   els.live.textContent = '';
   lastSent = '';
+  if (!sending) {
+    // Muted: the model still hears the line, but nothing is sent.
+    logFrame('pause', '');
+    logSeparator();
+    return;
+  }
   const text = line.text.trim();
   if (text) sendFrame('final', text);
   if (!sendEvent(SPEECH_ENDED_FRAME)) logFrame('pause', '');
@@ -602,6 +614,30 @@ function onMicEnabled(): void {
 /** Sends the `[disabled]` event frame after the microphone has been disabled. */
 function onMicDisabled(): void {
   sendEvent(DISABLED_FRAME);
+}
+
+/**
+ * Enables or disables transcription output without touching the microphone:
+ * when disabled, the transcriber keeps running but no frames go on the wire,
+ * so an `enable` command can resume sending with no user interaction on the
+ * page. Sends the `[enabled]`/`[disabled]` event frame on change; a no-op
+ * when the state already matches, so redundant commands do not spam the
+ * relay with event frames.
+ */
+function setSending(enabled: boolean): void {
+  if (sending === enabled) return;
+  sending = enabled;
+  if (!enabled) {
+    els.live.textContent = '';
+    lastSent = '';
+  }
+  els.micLabel.textContent = enabled ? 'Listening' : 'Muted';
+  setStatus(
+    enabled ? 'Transcribing' : 'Microphone live — transcription suppressed',
+    enabled ? 'ready' : 'info',
+  );
+  if (enabled) onMicEnabled();
+  else onMicDisabled();
 }
 
 /**
@@ -679,9 +715,11 @@ function runCommand(command: string): boolean {
       return true;
     case 'enable':
       if (!running) void startListening();
+      else setSending(true);
       return true;
     case 'disable':
-      if (running) void stopListening();
+      // The microphone stays live; only the transcription output is muted.
+      if (running) setSending(false);
       return true;
     case 'removePunctuationToggle':
       setToggle(els.sanitize, !els.sanitize.checked, SANITIZE_KEY, onRemovePunctuationToggled);
@@ -900,6 +938,7 @@ async function startListening(): Promise<void> {
     await ensureMicPermission();
     await mic!.start();
     running = true;
+    sending = true; // a fresh start always sends
     document.body.dataset.state = 'listening';
     els.mic.setAttribute('aria-label', 'Stop listening');
     els.micLabel.textContent = 'Listening';
@@ -921,6 +960,7 @@ async function stopListening(): Promise<void> {
   els.mic.disabled = true;
   await mic?.stop(); // flushes any in-progress line through onLine()
   running = false;
+  sending = true; // reset silently — the [disabled] frame below covers the stop
   els.live.textContent = '';
   document.body.dataset.state = 'idle';
   els.mic.setAttribute('aria-label', 'Start listening');
