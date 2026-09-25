@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -40,5 +41,18 @@ func TestLoadSettingsBrokenFile(t *testing.T) {
 	// A corrupted file must fall back to the defaults, not panic or fail.
 	if got := loadSettings(path); got.AutoStart {
 		t.Errorf("loadSettings on broken file: AutoStart = true, want false")
+	}
+	// The defaults must also be written back, so what is on disk matches
+	// what the UI shows before the user toggles anything.
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile after reset: %v", err)
+	}
+	var got settings
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("reset file is not valid JSON (%v): %q", err, data)
+	}
+	if got.AutoStart {
+		t.Errorf("reset file: AutoStart = true, want false")
 	}
 }

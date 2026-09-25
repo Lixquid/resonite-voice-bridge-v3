@@ -30,8 +30,9 @@ func settingsPath() (string, error) {
 
 // loadSettings reads the settings file, falling back to the zero settings
 // (everything off) when the file does not exist or cannot be parsed. A
-// broken file is never fatal: the user simply gets the defaults and the
-// file is rewritten with valid JSON on the next change.
+// broken file is never fatal: the user simply gets the defaults, and the
+// file is immediately rewritten with them, so the on-disk state always
+// matches what the menu shows before the user toggles anything.
 func loadSettings(path string) settings {
 	var s settings
 	data, err := os.ReadFile(path)
@@ -40,7 +41,10 @@ func loadSettings(path string) settings {
 	}
 	if err := json.Unmarshal(data, &s); err != nil {
 		log.Printf("Ignoring unreadable settings file %s: %v", path, err)
-		return settings{}
+		s = settings{}
+		if err := saveSettings(path, s); err != nil {
+			log.Printf("Resetting settings file %s: %v", path, err)
+		}
 	}
 	return s
 }

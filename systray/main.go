@@ -94,15 +94,19 @@ func onReady() {
 			select {
 			case <-mAutoStart.ClickedCh:
 				// Checkbox menu item: the systray library does not flip the
-				// check mark itself, so the new state is both stored and
-				// reflected in the menu here.
-				go func() {
-					saveSettings(mustSettingsPath(), settings{AutoStart: !mAutoStart.Checked()})
-				}()
-				if mAutoStart.Checked() {
-					mAutoStart.Uncheck()
-				} else {
+				// check mark itself (on any platform), so the new state must be
+				// computed from the old one *before* the menu is updated, and
+				// that one value is used for both the UI and the saved setting.
+				// Saving in a goroutine that re-reads Checked() would race with
+				// Check/Uncheck below and could persist the inverse state.
+				autoStart := !mAutoStart.Checked()
+				if autoStart {
 					mAutoStart.Check()
+				} else {
+					mAutoStart.Uncheck()
+				}
+				if err := saveSettings(mustSettingsPath(), settings{AutoStart: autoStart}); err != nil {
+					log.Printf("Saving settings: %v", err)
 				}
 			case <-mOpen.ClickedCh:
 				openBrowser("http://localhost:" + listenPort)
