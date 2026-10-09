@@ -136,13 +136,17 @@ const DEFAULT_CONFIDENCE = 0.5;
 const MODEL_KEY = 'modelArch';
 /** Persisted base URLs for the models not shipped with the app. */
 const MODEL_URL_KEY = 'modelUrls';
-/** Default download location for the small and medium models. */
-const CDN_BASE = 'https://download.moonshine.ai/model';
-const CDN_REV = 'quantized_26_07_30';
 
+/**
+ * Default download locations for the models that do not ship with the app:
+ * both are served by the desktop client itself, which downloads them into a
+ * cache folder on first start and serves them from there — the frontend
+ * never touches an external service. The settings dialog can still override
+ * these with any other base URL.
+ */
 const DEFAULT_MODEL_URLS: ModelUrls = {
-  small: `${CDN_BASE}/small-streaming-en/${CDN_REV}`,
-  medium: `${CDN_BASE}/medium-streaming-en/${CDN_REV}`,
+  small: '/models/small_streaming',
+  medium: '/models/medium_streaming',
 };
 
 // --- localStorage helpers -----------------------------------------------------
@@ -620,6 +624,10 @@ const els = {
   live: byId<HTMLElement>('live'),
   frames: byId<HTMLElement>('frames'),
 };
+
+// The settings gear is only shown when the localStorage flag
+// `showSuperAdvancedSettings` is set to the string "true".
+els.settings.hidden = localStorage.getItem('showSuperAdvancedSettings') !== 'true';
 
 // --- WebSocket relay -------------------------------------------------------------
 
@@ -1230,8 +1238,9 @@ function runCommand(command: string): boolean {
 /**
  * Local and remote base URLs for a model's files: the tiny model ships with
  * the app; the others are first looked for on the same server (`/models/…`,
- * present when vendored) and then fetched from the URL configured in the
- * settings dialog.
+ * served from the desktop client's cache folder) and then fetched from the
+ * URL configured in the settings dialog (which defaults to that same cache
+ * path, so an explicit override is only needed for custom hosting).
  */
 function modelSources(key: ArchKey): { local: string; remote?: string } {
   if (key === 'tiny') return { local: '/models/tiny_streaming' };

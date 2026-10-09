@@ -17,7 +17,10 @@ import (
 //
 // Any request carrying a WebSocket upgrade (regardless of the path, the
 // canonical endpoint being the root "/") is routed to the relay. All other
-// requests are served the embedded frontend.
+// requests are served the embedded frontend, with the large models (small
+// and medium Moonshine, Needle 3) served from the on-disk model cache (see
+// modelcache.go) — the embedded files win for paths the frontend ships
+// (e.g. the bundled tiny model under /models/tiny_streaming).
 var frontendFS = frontend.FS()
 
 func newHandler() http.Handler {
@@ -28,6 +31,12 @@ func newHandler() http.Handler {
 		}
 		if existsInFS(frontendFS, r.URL.Path[1:]) {
 			serveStaticFile(w, r, r.URL.Path[1:])
+			return
+		}
+		// The model cache prefixes (/models/ and /needle3/) are answered
+		// here even when a file is missing: a 404 lets the frontend treat
+		// the file as absent instead of receiving the SPA fallback below.
+		if serveModelCache(w, r) {
 			return
 		}
 		// The frontend is a single-page app: fall back to index.html for

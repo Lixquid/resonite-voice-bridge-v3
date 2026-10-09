@@ -15,8 +15,10 @@ license is reproduced in `public/models/LICENSE.moonshine` and summarized in
 our [LICENSE](LICENSE).
 
 Everything required to run — the Moonshine WASM binding and all model files —
-is served locally. The app works with no connection to the internet (only the
-WebSocket relay you point it at needs to be reachable).
+is served locally: the tiny model ships with the app, and the desktop client
+downloads the remaining models into a cache folder and serves them itself. The
+app works with no connection to the internet (only the WebSocket relay you
+point it at needs to be reachable).
 
 ## Behavior
 
@@ -80,9 +82,10 @@ Are you well?
   are the \x1D/\x1E control characters and are sent verbatim, bypassing
   punctuation removal); results below the threshold are only logged. The
   engine runs in a worker (see `src/needle.ts`, mirroring the Needle 3
-  sandbox in the project's reference folder) and downloads its model from a
-  pinned Hugging Face revision on first use, so this feature needs internet
-  access the first time. Normal transcription frames are unaffected.
+  sandbox in the project's reference folder) and is loaded from the desktop
+  client, which downloads the pinned Hugging Face revision into its cache
+  folder and serves it at `/needle3/` — no external service is contacted
+  from the frontend. Normal transcription frames are unaffected.
 - The WebSocket defaults to `ws://localhost:9999` (editable in the UI). Frames
   are queued while the socket is down and flushed once it connects, so
   transcription never stalls on the connection.
@@ -97,6 +100,11 @@ npm install
 npm run dev         # SPA on http://localhost:8080 (sends COOP/COEP headers)
 npm run ws-server   # logging server on ws://localhost:9999 to watch the frames
 ```
+
+In dev the small/medium models and the Needle 3 engine are proxied to the
+desktop client (`http://localhost:6789`, see `vite.config.ts`), so run the
+Go binary alongside `npm run dev` for those to load — the same paths the
+embedded frontend uses in production.
 
 Open http://localhost:8080 — it connects to the relay immediately (retrying
 every 10 s until it is up) — then press the mic and talk. Every frame the app
@@ -119,15 +127,22 @@ as the Moonshine examples' `serve.mjs`).
   (`frontend.ort`, `encoder.ort`, `adapter.ort`, `cross_kv.ort`,
   `decoder_kv.ort`, `streaming_config.json`, `tokenizer.bin`).
 - The **small and medium** models are too large for the repo and are
-  gitignored. At load time the app first looks for them on the same server
-  (`/models/small_streaming/`, `/models/medium_streaming/` — vendored via the
-  script below, or any reverse-proxied copy) and fetches any missing file from
-  the base URLs set in the settings dialog (cogwheel), which default to the
-  Moonshine CDN. Whatever is found is loaded via `MicTranscriber.modelsFrom()`
-  into memory (cached by the browser Cache API).
+  gitignored. The desktop client downloads them once into its cache folder
+  (`<UserCacheDir>/resonite-voice-bridge/models/…`, e.g.
+  `~/.cache/resonite-voice-bridge` on Linux) on startup, skipping files it
+  already has, and serves them at `/models/small_streaming/` and
+  `/models/medium_streaming/`. At load time the app fetches them from there,
+  falling back to the base URLs set in the settings dialog (cogwheel) — which
+  default to those same cache paths and only need changing for custom
+  hosting. Whatever is found is loaded via `MicTranscriber.modelsFrom()` into
+  memory (cached by the browser Cache API).
+- The **Needle 3** engine (`wasm/needle.js`, `wasm/needle.wasm`) and model
+  blob (`needle3.cact`) are likewise not vendored: the desktop client
+  downloads them into its cache folder (`needle3/`) and serves them at
+  `/needle3/` in the layout the worker expects.
 
-If you want the small/medium models served locally, fetch them once (requires
-internet) with:
+If you host the frontend on a static server without the desktop client, fetch
+the small/medium models once (requires internet) with:
 
 ```sh
 node scripts/fetch-models.mjs
@@ -140,11 +155,12 @@ the WASM module's manifest helpers.
 
 - **Model size** — Tiny / Small / Medium streaming models (Small is the
   default). The choice is persisted in `localStorage` and restored on the next
-  visit. Tiny is bundled; the small/medium download locations are configurable
-  in the settings dialog and persisted too.
+  visit. Tiny is bundled; the small/medium models are served from the desktop
+  client's cache folder, with optional custom base URLs in the settings
+  dialog (persisted too).
 - **Settings (cogwheel)** — base URLs for the small and medium models, used
-  when the files are not served locally. Reset to defaults is one click; saved
-  URLs take effect on the next model load.
+  when the files are not served from the desktop client's cache. Reset to
+  defaults is one click; saved URLs take effect on the next model load.
 
 ## Notes
 

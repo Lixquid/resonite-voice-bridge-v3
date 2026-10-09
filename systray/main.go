@@ -5,6 +5,9 @@
 //   - The built frontend (see frontend/) over plain HTTP.
 //   - A WebSocket relay on the root path: any text frame received from one
 //     connected client is retransmitted to every other connected client.
+//
+// It also downloads the large voice models into a per-user cache folder on
+// start and serves them alongside the frontend (see modelcache.go).
 package main
 
 import (
@@ -31,6 +34,12 @@ func main() {
 	}
 
 	log.Printf("Resonite Voice Bridge %s", appVersion())
+
+	// Download the large models (small/medium Moonshine, Needle 3) into the
+	// cache folder in the background, so they are served from disk the next
+	// time the frontend asks for them. Anything already cached is kept; the
+	// frontend falls back to the settings-dialog URLs for missing files.
+	go warmModelCache()
 
 	ln, err := net.Listen("tcp", ":"+listenPort)
 	if err != nil {

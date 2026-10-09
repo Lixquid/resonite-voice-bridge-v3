@@ -487,6 +487,10 @@ button {
   transition: color 120ms ease, border-color 120ms ease;
 }
 
+.gear[hidden] {
+  display: none;
+}
+
 .gear:hover {
   color: var(--text);
   border-color: var(--line-strong);

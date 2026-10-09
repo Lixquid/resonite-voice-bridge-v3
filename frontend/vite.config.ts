@@ -88,6 +88,16 @@ export default defineConfig({
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'require-corp',
     },
+    // In dev the page runs here (8080) while the desktop client serves the
+    // model cache on its own port (see systray/modelcache.go). Proxy the
+    // cache paths so the frontend always loads the models from the backend,
+    // exactly as it does when embedded in the Go binary. The tiny model is
+    // not proxied: it ships in public/ and is served by Vite directly.
+    proxy: {
+      '/models/small_streaming': { target: 'http://localhost:6789' },
+      '/models/medium_streaming': { target: 'http://localhost:6789' },
+      '/needle3': { target: 'http://localhost:6789' },
+    },
   },
   build: {
     target: 'es2022',

@@ -43,9 +43,9 @@
       <dialog id="settingsDialog">
         <h3>Model locations</h3>
         <p class="hint">
-          The tiny model ships with the app. If a small or medium model is
-          found on the server it is used from disk; otherwise it is downloaded
-          from these URLs (Moonshine CDN by default) and cached in the browser.
+          The tiny model ships with the app. The small and medium models are
+          downloaded by the desktop client into its cache folder and served
+          from there at these locations (used as-is unless you change them).
           The binding itself can also be loaded from another host that serves
           the <code>dist</code> files (see TODO.txt for server requirements).
         </p>
@@ -187,7 +187,8 @@
         <h2>Natural Language Tools</h2>
         <p class="panel-hint">
           Recognized text that starts with the wake word is run through the
-          Needle&nbsp;3 model (downloaded on first use) together with the tool
+          Needle&nbsp;3 model (downloaded into the desktop client's cache
+          folder and served from there) together with the tool
           definitions below. Each successful tool call is emitted as
           <code>[tool.sep]TOOL_NAME&nbsp;<var>GS</var>&nbsp;KEY=VALUE&nbsp;<var>RS</var>&nbsp;KEY2=VALUE</code>,
           where GS/RS are the group and record separator control characters.

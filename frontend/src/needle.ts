@@ -4,18 +4,22 @@
  * Needle turns a natural-language request into tool calls against a JSON
  * tool definition (OpenAI-style function schemas). The engine ships as
  * `wasm/needle.js` + `wasm/needle.wasm` plus a `needle3.cact` model blob on
- * Hugging Face. It runs inside a dedicated classic Worker (created from a
- * Blob URL, exactly like the Needle 3 sandbox in the project's reference
- * folder) so its synchronous decode never blocks the transcription UI.
+ * Hugging Face; the desktop client downloads all three into its cache folder
+ * and serves them itself (see systray/modelcache.go). It runs inside a
+ * dedicated classic Worker (created from a Blob URL, exactly like the Needle
+ * 3 sandbox in the project's reference folder) so its synchronous decode
+ * never blocks the transcription UI.
  */
 
 /**
- * Pinned Hugging Face revision so a new upload cannot change the engine
- * underneath us; bump deliberately. Files: wasm/needle.js, wasm/needle.wasm,
- * needle3.cact.
+ * Base URL for the Needle 3 engine and model. The desktop client downloads
+ * the pinned Hugging Face revision (files wasm/needle.js, wasm/needle.wasm
+ * and needle3.cact) into its cache folder on startup and serves them from
+ * /needle3/ here, so the frontend never depends on an external service.
+ * The URL must be absolute: the worker fetches these paths from a blob-URL
+ * scope, where origin-relative paths do not resolve against the page.
  */
-const NEEDLE_BASE =
-  'https://huggingface.co/Cactus-Compute/needle3/resolve/c7c415a3d1b3d929014bc6e866d51ebb971f7089';
+const NEEDLE_BASE = `${window.location.origin}/needle3`;
 /** The model blob filename within {@link NEEDLE_BASE}. */
 const NEEDLE_BLOB = 'needle3.cact';
 
