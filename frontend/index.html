@@ -203,6 +203,11 @@
           <textarea id="nlToolsText" rows="10" spellcheck="false" aria-label="Tool definitions"></textarea>
           <small class="nl-sub">A JSON array of tool definition blocks (OpenAI-style function schemas).</small>
         </div>
+        <div class="nl-field" id="nlDisabledToolsField" hidden>
+          <label for="nlDisabledToolsText">Disabled Tools</label>
+          <textarea id="nlDisabledToolsText" rows="10" spellcheck="false" aria-label="Disabled tool definitions"></textarea>
+          <small class="nl-sub">Tool definitions that are disabled and not sent to the model. Tools are moved here and back with the <code>naturalLanguageToolsDisableTool</code> / <code>naturalLanguageToolsEnableTool</code> commands.</small>
+        </div>
         <div class="nl-field">
           <label for="nlConfidence">Confidence Threshold</label>
           <input id="nlConfidence" type="number" min="0" max="1" step="0.01" value="0.5" />
@@ -248,6 +253,9 @@
             <li><button type="button" class="doc-event-btn" data-event="naturalLanguageToolsToggle">naturalLanguageToolsToggle</button> - Toggles the natural language tool calling on and off.</li>
             <li><button type="button" class="doc-event-btn" data-event="naturalLanguageToolsEnable">naturalLanguageToolsEnable</button> - Enables the natural language tool calling.</li>
             <li><button type="button" class="doc-event-btn" data-event="naturalLanguageToolsDisable">naturalLanguageToolsDisable</button> - Disables the natural language tool calling.</li>
+            <li><button type="button" class="doc-event-btn" data-event="naturalLanguageToolsDisableTool=TOOL_NAME">naturalLanguageToolsDisableTool=TOOL_NAME</button> - Disables the specific tool with the given name.</li>
+            <li><button type="button" class="doc-event-btn" data-event="naturalLanguageToolsEnableTool=TOOL_NAME">naturalLanguageToolsEnableTool=TOOL_NAME</button> - Re-enables the specific tool with the given name.</li>
+            <li><button type="button" class="doc-event-btn" data-event="naturalLanguageToolsEnableOnlyTools=TOOL_NAME,TOOL_NAME2">naturalLanguageToolsEnableOnlyTools=TOOL_NAME,TOOL_NAME2</button> - Enables the given tools, and disables all tools not mentioned.</li>
           </ul>
         </details>
       </section>

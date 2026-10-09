@@ -126,6 +126,8 @@ const NL_TOOLS_KEY = 'nlTools';
 const NL_WAKE_WORD_KEY = 'nlWakeWord';
 /** Persisted needle3 tool definition JSON block. */
 const NL_TOOLS_TEXT_KEY = 'nlToolsText';
+/** Persisted JSON block of disabled tool definitions. */
+const NL_DISABLED_TOOLS_TEXT_KEY = 'nlDisabledToolsText';
 /** Persisted tool-call confidence threshold (0-1). */
 const NL_CONFIDENCE_KEY = 'nlConfidence';
 /** Fallback confidence threshold when the persisted value is unusable. */
@@ -336,6 +338,117 @@ function nlConfidenceThreshold(): number {
   return Math.min(1, Math.max(0, parsed));
 }
 
+// --- Disabled tools ------------------------------------------------------------
+
+/** One entry of the tool definition arrays (OpenAI-style function schema). */
+interface ToolDef {
+  name?: unknown;
+  [key: string]: unknown;
+}
+
+/** The tool's `name` as a string, or '' for malformed entries. */
+function toolName(tool: ToolDef): string {
+  return typeof tool.name === 'string' ? tool.name : '';
+}
+
+/**
+ * Parses a tool definition JSON array out of a textarea. Returns `null` (and
+ * logs an error to the STATUS panel) when the text is not a JSON array, since
+ * tools cannot be moved in or out of malformed content.
+ */
+function parseTools(text: string, label: string): ToolDef[] | null {
+  try {
+    const parsed = JSON.parse(text || '[]') as unknown;
+    if (!Array.isArray(parsed)) throw new Error('not a JSON array');
+    return parsed as ToolDef[];
+  } catch (err) {
+    logEvent(
+      `Natural Language Tools: ${label} tool definitions are not valid JSON — ${(err as Error).message}`,
+      'error',
+    );
+    return null;
+  }
+}
+
+/** Writes a tool array back into a textarea, persists it, and saves any pending value. */
+function saveTools(input: HTMLTextAreaElement, key: string, tools: ToolDef[]): void {
+  input.value = JSON.stringify(tools, null, 2);
+  writeStorage(key, input.value);
+}
+
+/** Shows the Disabled Tools field only while it holds any content. */
+function updateDisabledToolsVisibility(): void {
+  els.nlDisabledToolsField.hidden = els.nlDisabledToolsText.value.trim() === '';
+}
+
+/**
+ * Moves the disabled tool named `name` back into the live tools. When no
+ * disabled tool has that name, an error is logged and nothing changes.
+ */
+function enableNlTool(name: string): void {
+  const disabled = parseTools(els.nlDisabledToolsText.value, 'disabled');
+  const live = parseTools(els.nlToolsText.value, 'live');
+  if (!disabled || !live) return;
+  const index = disabled.findIndex((tool) => toolName(tool) === name);
+  if (index < 0) {
+    logEvent(`Natural Language Tools: disabled tool "${name}" not found.`, 'error');
+    return;
+  }
+  const [tool] = disabled.splice(index, 1);
+  live.push(tool);
+  saveTools(els.nlToolsText, NL_TOOLS_TEXT_KEY, live);
+  saveTools(els.nlDisabledToolsText, NL_DISABLED_TOOLS_TEXT_KEY, disabled);
+  updateDisabledToolsVisibility();
+  logEvent(`Natural Language Tools: enabled tool "${name}".`);
+}
+
+/**
+ * Moves the live tool named `name` into the disabled tools. When no live tool
+ * has that name, an error is logged and nothing changes.
+ */
+function disableNlTool(name: string): void {
+  const disabled = parseTools(els.nlDisabledToolsText.value, 'disabled');
+  const live = parseTools(els.nlToolsText.value, 'live');
+  if (!disabled || !live) return;
+  const index = live.findIndex((tool) => toolName(tool) === name);
+  if (index < 0) {
+    logEvent(`Natural Language Tools: live tool "${name}" not found.`, 'error');
+    return;
+  }
+  const [tool] = live.splice(index, 1);
+  disabled.push(tool);
+  saveTools(els.nlToolsText, NL_TOOLS_TEXT_KEY, live);
+  saveTools(els.nlDisabledToolsText, NL_DISABLED_TOOLS_TEXT_KEY, disabled);
+  updateDisabledToolsVisibility();
+  logEvent(`Natural Language Tools: disabled tool "${name}".`);
+}
+
+/**
+ * Moves every tool named in `names` from the disabled tools to the live ones,
+ * and every live tool not named there to the disabled ones — leaving only the
+ * mentioned tools live. Names present in neither list are ignored.
+ */
+function enableOnlyNlTools(names: string[]): void {
+  const disabled = parseTools(els.nlDisabledToolsText.value, 'disabled');
+  const live = parseTools(els.nlToolsText.value, 'live');
+  if (!disabled || !live) return;
+  const wanted = new Set(names);
+  const disabledKeep: ToolDef[] = [];
+  const enabled: ToolDef[] = [];
+  for (const tool of disabled) {
+    (wanted.delete(toolName(tool)) ? enabled : disabledKeep).push(tool);
+  }
+  const liveKeep: ToolDef[] = [];
+  const disabledNow: ToolDef[] = [];
+  for (const tool of live) {
+    (wanted.has(toolName(tool)) ? liveKeep : disabledNow).push(tool);
+  }
+  saveTools(els.nlToolsText, NL_TOOLS_TEXT_KEY, [...liveKeep, ...enabled]);
+  saveTools(els.nlDisabledToolsText, NL_DISABLED_TOOLS_TEXT_KEY, [...disabledKeep, ...disabledNow]);
+  updateDisabledToolsVisibility();
+  logEvent(`Natural Language Tools: enabled only ${names.join(', ')}.`);
+}
+
 /** Formats one tool call as `name(arg1, arg2)` for the frame log. */
 function describeNeedleCall(call: NeedleCall): string {
   const args = Object.entries(call.arguments ?? {}).map(([key, value]) => {
@@ -482,6 +595,8 @@ const els = {
   nlToolsPanel: byId<HTMLElement>('nlToolsPanel'),
   nlWakeWord: byId<HTMLInputElement>('nlWakeWord'),
   nlToolsText: byId<HTMLTextAreaElement>('nlToolsText'),
+  nlDisabledToolsField: byId<HTMLElement>('nlDisabledToolsField'),
+  nlDisabledToolsText: byId<HTMLTextAreaElement>('nlDisabledToolsText'),
   nlConfidence: byId<HTMLInputElement>('nlConfidence'),
   nlStatus: byId<HTMLElement>('nlStatus'),
   streamDefault: byId<HTMLInputElement>('streamDefault'),
@@ -1026,6 +1141,28 @@ function setToggle(
 
 /** Runs one relay command; returns whether it was recognized. */
 function runCommand(command: string): boolean {
+  // Commands that take arguments use COMMAND=ARGS, e.g. tool enable/disable.
+  const equals = command.indexOf('=');
+  if (equals > 0) {
+    const name = command.slice(0, equals);
+    const arg = command.slice(equals + 1).trim();
+    switch (name) {
+      case 'naturalLanguageToolsEnableTool':
+        if (arg) enableNlTool(arg);
+        return true;
+      case 'naturalLanguageToolsDisableTool':
+        if (arg) disableNlTool(arg);
+        return true;
+      case 'naturalLanguageToolsEnableOnlyTools':
+        enableOnlyNlTools(
+          arg
+            .split(',')
+            .map((tool) => tool.trim())
+            .filter(Boolean),
+        );
+        return true;
+    }
+  }
   switch (command) {
     case 'toggle':
       if (running) void stopListening();
@@ -1351,6 +1488,16 @@ els.nlTools.addEventListener('change', updateNlToolsPanel);
 bindText(els.nlWakeWord, NL_WAKE_WORD_KEY);
 bindText(els.nlToolsText, NL_TOOLS_TEXT_KEY);
 bindText(els.nlConfidence, NL_CONFIDENCE_KEY);
+// Disabled Tools: persists like the other fields, but the field is only
+// visible when it holds content — on page load, or once a command puts
+// something into it (updates run after every command-driven write too).
+const savedDisabledTools = readStorage(NL_DISABLED_TOOLS_TEXT_KEY);
+if (savedDisabledTools !== null) els.nlDisabledToolsText.value = savedDisabledTools;
+els.nlDisabledToolsText.addEventListener('input', () => {
+  writeStorage(NL_DISABLED_TOOLS_TEXT_KEY, els.nlDisabledToolsText.value);
+  updateDisabledToolsVisibility();
+});
+updateDisabledToolsVisibility();
 updateNlToolsPanel();
 els.wrAdd.addEventListener('click', () => {
   els.wrList.append(buildReplacementRow({ target: '', replacement: '' }));
