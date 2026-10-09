@@ -124,12 +124,15 @@
             <small class="opt-sub">Swap words for replacements before they are sent over the WebSocket. Manage the list in the panel below.</small>
           </span>
         </label>
-        <label class="opt">
-          <input type="checkbox" id="streamConfig" />
-          <span>Stream Configuration
-            <small class="opt-sub">Send additional copies of the recognized text as separate streams. Configure them in the panel below.</small>
-          </span>
-        </label>
+        <details class="adv" id="advancedSettings">
+          <summary>Advanced Settings</summary>
+          <label class="opt">
+            <input type="checkbox" id="streamConfig" />
+            <span>Stream Configuration
+              <small class="opt-sub">Send additional copies of the recognized text as separate streams. Configure them in the panel below.</small>
+            </span>
+          </label>
+        </details>
       </section>
 
       <section id="wrPanel" hidden>

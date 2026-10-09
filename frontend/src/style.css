@@ -301,12 +301,21 @@ button {
   color: var(--bad);
 }
 
-/* --- Documentation ------------------------------------------------------ */
+/* --- Collapsible sections (Advanced Settings / Documentation) ------------ */
+
+.adv {
+  margin-top: 1em;
+}
+
+.adv summary {
+  padding: 0.35rem 0;
+}
 
 .doc {
   margin-top: 0.9rem;
 }
 
+.adv summary,
 .doc summary {
   cursor: pointer;
   padding: 0 1.25rem 0 0;
@@ -318,16 +327,20 @@ button {
   transition: color 120ms ease;
 }
 
+.adv summary:hover,
 .doc summary:hover {
   color: var(--text);
 }
 
+.adv summary::-webkit-details-marker,
+.adv summary::marker,
 .doc summary::-webkit-details-marker,
 .doc summary::marker {
   display: none;
   content: "";
 }
 
+.adv summary::before,
 .doc summary::before {
   content: "";
   display: inline-block;
@@ -341,6 +354,7 @@ button {
   transition: transform 120ms ease;
 }
 
+.adv[open] summary::before,
 .doc[open] summary::before {
   transform: rotate(45deg);
 }
