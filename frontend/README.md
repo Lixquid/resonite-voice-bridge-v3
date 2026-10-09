@@ -54,13 +54,16 @@ Are you well?
   `[speechEnded]` after each final frame, `[enabled]` when transcription has
   been enabled, `[disabled]` when transcription has been disabled,
   `[removePunctuationEnabled]`/`[removePunctuationDisabled]` when the
-  punctuation removal feature has been enabled or disabled, and
+  punctuation removal feature has been enabled or disabled,
   `[outputStreamingEnabled]`/`[outputStreamingDisabled]` when the output
-  streaming feature has been enabled or disabled.
+  streaming feature has been enabled or disabled, and
+  `[naturalLanguageToolsEnabled]`/`[naturalLanguageToolsDisabled]` when the
+  natural language tool calling feature has been enabled or disabled.
 - Commands are incoming messages over the WebSocket relay that change how the
   bridge functions (toggle the microphone, enable/disable transcription, and
   toggle the
-  punctuation removal and output streaming settings — the full list lives in
+  punctuation removal, output streaming, word replacement, and natural
+  language tool calling settings — the full list lives in
   `COMMANDS.md` and is documented in the app's Documentation panel). They are
   only honored while the "Enable Commands" setting (persisted, default on) is
   active; otherwise each arriving command is noted in the log and ignored.

@@ -59,6 +59,9 @@ const OUTPUT_STREAMING_DISABLED_FRAME = '[outputStreamingDisabled]';
 /** Event frames sent when the word replacement toggle changes. */
 const REPLACEMENT_ENABLED_FRAME = '[replacementEnabled]';
 const REPLACEMENT_DISABLED_FRAME = '[replacementDisabled]';
+/** Event frames sent when the natural language tool calling toggle changes. */
+const NL_TOOLS_ENABLED_FRAME = '[naturalLanguageToolsEnabled]';
+const NL_TOOLS_DISABLED_FRAME = '[naturalLanguageToolsDisabled]';
 /** Prefixes marking frames from the extra streams of Stream Configuration. */
 const ORIGINAL_STREAM_PREFIX = '[stream.orig]';
 const NORMALIZED_STREAM_PREFIX = '[stream.norm]';
@@ -96,6 +99,8 @@ const EVENT_FRAMES = new Set([
   OUTPUT_STREAMING_DISABLED_FRAME,
   REPLACEMENT_ENABLED_FRAME,
   REPLACEMENT_DISABLED_FRAME,
+  NL_TOOLS_ENABLED_FRAME,
+  NL_TOOLS_DISABLED_FRAME,
 ]);
 /** Persisted flag: send event frames (e.g. {@link SPEECH_ENDED_FRAME})? Default on. */
 const SEND_EVENTS_KEY = 'sendEvents';
@@ -973,6 +978,14 @@ function onWordReplacementToggled(): void {
   sendEvent(els.wordReplacement.checked ? REPLACEMENT_ENABLED_FRAME : REPLACEMENT_DISABLED_FRAME);
 }
 
+/**
+ * Sends the `[naturalLanguageToolsEnabled]` / `[naturalLanguageToolsDisabled]`
+ * event frame whenever the natural language tool calling toggle changes.
+ */
+function onNlToolsToggled(): void {
+  sendEvent(els.nlTools.checked ? NL_TOOLS_ENABLED_FRAME : NL_TOOLS_DISABLED_FRAME);
+}
+
 // --- Commands -----------------------------------------------------------------------
 
 /**
@@ -1062,6 +1075,15 @@ function runCommand(command: string): boolean {
       return true;
     case 'replacementDisable':
       setToggle(els.wordReplacement, false, WORD_REPLACEMENT_KEY, onWordReplacementToggled);
+      return true;
+    case 'naturalLanguageToolsToggle':
+      setToggle(els.nlTools, !els.nlTools.checked, NL_TOOLS_KEY, onNlToolsToggled);
+      return true;
+    case 'naturalLanguageToolsEnable':
+      setToggle(els.nlTools, true, NL_TOOLS_KEY, onNlToolsToggled);
+      return true;
+    case 'naturalLanguageToolsDisable':
+      setToggle(els.nlTools, false, NL_TOOLS_KEY, onNlToolsToggled);
       return true;
     default:
       return false;
@@ -1324,7 +1346,7 @@ els.streamConfig.addEventListener('change', updateStreamPanel);
 // persists as it is edited. The starter tool block is only used when
 // nothing has been saved yet.
 if (readStorage(NL_TOOLS_TEXT_KEY) === null) els.nlToolsText.value = DEFAULT_TOOL_DEFINITIONS;
-bindCheckbox(els.nlTools, NL_TOOLS_KEY);
+bindCheckbox(els.nlTools, NL_TOOLS_KEY, onNlToolsToggled);
 els.nlTools.addEventListener('change', updateNlToolsPanel);
 bindText(els.nlWakeWord, NL_WAKE_WORD_KEY);
 bindText(els.nlToolsText, NL_TOOLS_TEXT_KEY);
