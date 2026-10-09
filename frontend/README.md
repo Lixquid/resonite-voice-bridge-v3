@@ -67,6 +67,19 @@ Are you well?
   Recognized commands appear in the frame log in the accent color, setting
   changes they make send the usual event frames, and unknown commands are
   logged as errors.
+- **Natural Language Tool Calling** (Advanced Settings, off by default) runs
+  each final transcript line through the
+  [Needle 3](https://huggingface.co/Cactus-Compute/needle3) WASM engine when
+  it starts with the configured wake word. The panel below the toggle holds
+  the wake word, a JSON tool definition block (OpenAI-style function
+  schemas), and a confidence threshold (0-1). Successful tool calls are
+  emitted as `[tool.sep]TOOL_NAME<GS>KEY=VALUE<RS>KEY2=VALUE` frames (GS/RS
+  are the \x1D/\x1E control characters and are sent verbatim, bypassing
+  punctuation removal); results below the threshold are only logged. The
+  engine runs in a worker (see `src/needle.ts`, mirroring the Needle 3
+  sandbox in the project's reference folder) and downloads its model from a
+  pinned Hugging Face revision on first use, so this feature needs internet
+  access the first time. Normal transcription frames are unaffected.
 - The WebSocket defaults to `ws://localhost:9999` (editable in the UI). Frames
   are queued while the socket is down and flushed once it connects, so
   transcription never stalls on the connection.

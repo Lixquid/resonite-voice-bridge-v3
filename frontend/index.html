@@ -132,6 +132,12 @@
               <small class="opt-sub">Send additional copies of the recognized text as separate streams. Configure them in the panel below.</small>
             </span>
           </label>
+          <label class="opt">
+            <input type="checkbox" id="nlTools" />
+            <span>Natural Language Tool Calling
+              <small class="opt-sub">Run recognized text that starts with the wake word through the Needle&nbsp;3 engine and emit tool call frames. Configure it in the panel below.</small>
+            </span>
+          </label>
         </details>
       </section>
 
@@ -175,6 +181,34 @@
             <small class="opt-sub">The text with punctuation removed, prefixed with <code>[stream.norm]</code>.</small>
           </span>
         </label>
+      </section>
+
+      <section id="nlToolsPanel" hidden>
+        <h2>Natural Language Tools</h2>
+        <p class="panel-hint">
+          Recognized text that starts with the wake word is run through the
+          Needle&nbsp;3 model (downloaded on first use) together with the tool
+          definitions below. Each successful tool call is emitted as
+          <code>[tool.sep]TOOL_NAME&nbsp;<var>GS</var>&nbsp;KEY=VALUE&nbsp;<var>RS</var>&nbsp;KEY2=VALUE</code>,
+          where GS/RS are the group and record separator control characters.
+          Transcribed text keeps streaming as usual.
+        </p>
+        <div class="nl-field">
+          <label for="nlWakeWord">Wake Word</label>
+          <input id="nlWakeWord" type="text" spellcheck="false" placeholder="hey bridge" />
+          <small class="nl-sub">The word to listen for to start tool processing. Messages that don't start with it are ignored.</small>
+        </div>
+        <div class="nl-field">
+          <label for="nlToolsText">Tools</label>
+          <textarea id="nlToolsText" rows="10" spellcheck="false" aria-label="Tool definitions"></textarea>
+          <small class="nl-sub">A JSON array of tool definition blocks (OpenAI-style function schemas).</small>
+        </div>
+        <div class="nl-field">
+          <label for="nlConfidence">Confidence Threshold</label>
+          <input id="nlConfidence" type="number" min="0" max="1" step="0.01" value="0.5" />
+          <small class="nl-sub">A number from 0 to 1. Outputs below this threshold are logged but don't emit tool calls.</small>
+        </div>
+        <p class="nl-status" id="nlStatus"></p>
       </section>
 
       <section>

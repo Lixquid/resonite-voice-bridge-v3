@@ -301,6 +301,57 @@ button {
   color: var(--bad);
 }
 
+/* --- Natural Language Tools panel ------------------------------------- */
+
+.nl-field {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.9rem;
+}
+
+.nl-field label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.nl-field input,
+.nl-field textarea {
+  width: 100%;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-strong);
+  color: var(--text);
+  font: 0.9rem var(--mono);
+}
+
+.nl-field textarea {
+  resize: vertical;
+  min-height: 8rem;
+  line-height: 1.4;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+}
+
+.nl-field input:focus,
+.nl-field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.nl-sub {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.nl-status {
+  margin: 0;
+  min-height: 1.2em;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
 /* --- Collapsible sections (Advanced Settings / Documentation) ------------ */
 
 .adv {
@@ -743,6 +794,11 @@ body[data-state="listening"] .mic__stop {
 
 .frame--cmd .msg {
   color: var(--accent);
+  font-weight: 600;
+}
+
+.frame--tool .msg {
+  color: var(--warn);
   font-weight: 600;
 }
 

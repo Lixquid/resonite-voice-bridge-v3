@@ -9,11 +9,12 @@ import {
   type TranscriptLine,
 } from './moonshine';
 import './style.css';
+import { needlePrewarm, needleRun, type NeedleCall } from './needle';
 
 // --- Types ---------------------------------------------------------------------
 
 type WsState = 'closed' | 'connecting' | 'open';
-type FrameKind = 'partial' | 'final' | 'pause' | 'sys' | 'error' | 'cmd';
+type FrameKind = 'partial' | 'final' | 'pause' | 'sys' | 'error' | 'cmd' | 'tool';
 type ArchKey = 'tiny' | 'small' | 'medium';
 /** Base URLs for the models that are not bundled with the app. */
 type ModelUrls = Record<Exclude<ArchKey, 'tiny'>, string>;
@@ -61,6 +62,29 @@ const REPLACEMENT_DISABLED_FRAME = '[replacementDisabled]';
 /** Prefixes marking frames from the extra streams of Stream Configuration. */
 const ORIGINAL_STREAM_PREFIX = '[stream.orig]';
 const NORMALIZED_STREAM_PREFIX = '[stream.norm]';
+/** Frame prefix marking a natural-language tool call (see needle.ts). */
+const TOOL_SEP_FRAME = '[tool.sep]';
+/** ASCII group/record separators framing tool call keys and pairs. */
+const TOOL_GROUP_SEP = '\x1D';
+const TOOL_RECORD_SEP = '\x1E';
+/** Starter tool definition block shown (and sent) when nothing is saved. */
+const DEFAULT_TOOL_DEFINITIONS = JSON.stringify(
+  [
+    {
+      name: 'spawn',
+      description: 'Spawn an item in front of the user.',
+      parameters: {
+        type: 'object',
+        properties: {
+          ITEM: { type: 'string', description: 'The item to spawn, e.g. dev_tool.' },
+        },
+        required: ['ITEM'],
+      },
+    },
+  ],
+  null,
+  2,
+);
 /** All event frames — sanitize is bypassed so these markers stay intact. */
 const EVENT_FRAMES = new Set([
   SPEECH_ENDED_FRAME,
@@ -91,6 +115,16 @@ const STREAM_ORIGINAL_KEY = 'streamOriginal';
 const STREAM_NORMALIZED_KEY = 'streamNormalized';
 /** Persisted JSON list of {@link WordReplacement} entries. */
 const WORD_REPLACEMENTS_KEY = 'wordReplacements';
+/** Persisted flag: run wake-word text through the Needle 3 engine? */
+const NL_TOOLS_KEY = 'nlTools';
+/** Persisted wake word gating tool processing. */
+const NL_WAKE_WORD_KEY = 'nlWakeWord';
+/** Persisted needle3 tool definition JSON block. */
+const NL_TOOLS_TEXT_KEY = 'nlToolsText';
+/** Persisted tool-call confidence threshold (0-1). */
+const NL_CONFIDENCE_KEY = 'nlConfidence';
+/** Fallback confidence threshold when the persisted value is unusable. */
+const DEFAULT_CONFIDENCE = 0.5;
 /** Persisted key of the last used model size ({@link ArchKey}). */
 const MODEL_KEY = 'modelArch';
 /** Persisted base URLs for the models not shipped with the app. */
@@ -256,6 +290,167 @@ function updateStreamPanel(): void {
   }
 }
 
+/**
+ * Downloads the Needle 3 engine and model in the background so the first
+ * Natural Language Tool Calling request does not pay the download cost.
+ * Failures are logged; the next request (or prewarm) retries the load.
+ */
+function prewarmNeedle(): void {
+  void needlePrewarm(setNlStatus).catch((err) => {
+    setNlStatus('');
+    logEvent(`Needle: ${(err as Error).message}`, 'error');
+  });
+}
+
+/**
+ * Shows the Natural Language Tools panel only while the setting is on, and
+ * prewarms the Needle 3 model whenever it is turned on (including on page
+ * load, when the setting was already enabled).
+ */
+function updateNlToolsPanel(): void {
+  els.nlToolsPanel.hidden = !els.nlTools.checked;
+  if (els.nlTools.checked) prewarmNeedle();
+}
+
+/** Sets the Natural Language Tools panel status line (progress, errors). */
+function setNlStatus(text: string): void {
+  els.nlStatus.textContent = text;
+}
+
+/** Binds a text input or textarea to a persisted string preference. */
+function bindText(input: HTMLInputElement | HTMLTextAreaElement, key: string): void {
+  const saved = readStorage(key);
+  if (saved !== null) input.value = saved;
+  input.addEventListener('input', () => writeStorage(key, input.value));
+}
+
+/** Reads the confidence threshold input, clamped to 0-1 (default when invalid). */
+function nlConfidenceThreshold(): number {
+  const parsed = Number.parseFloat(els.nlConfidence.value);
+  if (!Number.isFinite(parsed)) return DEFAULT_CONFIDENCE;
+  return Math.min(1, Math.max(0, parsed));
+}
+
+/** Formats one tool call as `name(arg1, arg2)` for the frame log. */
+function describeNeedleCall(call: NeedleCall): string {
+  const args = Object.entries(call.arguments ?? {}).map(([key, value]) => {
+    const shown = typeof value === 'string' ? value : JSON.stringify(value) ?? 'null';
+    return `${key}=${shown}`;
+  });
+  return `${call.name}(${args.join(', ')})`;
+}
+
+/**
+ * Emits one tool call frame: `[tool.sep]NAME<GS>KEY=VALUE<RS>KEY2=VALUE`.
+ * String argument values go out raw; other types are JSON-encoded.
+ */
+function emitToolCall(call: NeedleCall): void {
+  const pairs = Object.entries(call.arguments ?? {})
+    .map(([key, value]) => `${key}=${typeof value === 'string' ? value : JSON.stringify(value) ?? 'null'}`)
+    .join(TOOL_RECORD_SEP);
+  sendFrame('tool', `${TOOL_SEP_FRAME}${call.name}${TOOL_GROUP_SEP}${pairs}`);
+}
+
+/**
+ * Runs the wake-worded text through the needle3 engine and emits (or logs)
+ * the resulting tool calls. The engine loads on first use; runs against the
+ * engine are serialized inside needle.ts.
+ */
+async function runNlTools(query: string): Promise<void> {
+  const tools = els.nlToolsText.value;
+  try {
+    JSON.parse(tools);
+  } catch (err) {
+    logEvent(
+      `Natural Language Tools: tool definitions are not valid JSON — ${(err as Error).message}`,
+      'error',
+    );
+    return;
+  }
+  const threshold = nlConfidenceThreshold();
+  try {
+    const result = await needleRun(tools, query, setNlStatus);
+    setNlStatus('');
+    const described = result.calls.map(describeNeedleCall).join('; ') || 'nothing';
+    if (!result.calls.length) {
+      logEvent(`Needle: no tool calls (confidence ${result.confidence.toFixed(2)}).`);
+      return;
+    }
+    if (!(result.confidence >= threshold)) {
+      logEvent(
+        `Needle: confidence ${result.confidence.toFixed(2)} below threshold ` +
+          `${threshold.toFixed(2)} — logged, not emitted: ${described}`,
+      );
+      return;
+    }
+    for (const call of result.calls) emitToolCall(call);
+  } catch (err) {
+    setNlStatus('');
+    logEvent(`Needle: ${(err as Error).message}`, 'error');
+  }
+}
+
+/**
+ * Strips punctuation from `text` so wake-word matching works on words only:
+ * "Hey, Bridge, do this thing." normalizes to "hey bridge do this thing",
+ * which matches a wake word of "hey bridge". Letters and numbers are kept;
+ * everything else becomes a space (never a join, so "hey,bridge" stays two
+ * words), runs of which collapse to one.
+ */
+function normalizeForWakeWord(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
+/**
+ * Called with each final line: when Natural Language Tool Calling is on and
+ * the punctuation-stripped line starts with the wake word, the remainder is
+ * processed by the Needle 3 engine. Lines that don't start with the wake word
+ * are ignored.
+ */
+function maybeRunTools(text: string): void {
+  if (!els.nlTools.checked) return;
+  const wake = normalizeForWakeWord(els.nlWakeWord.value);
+  if (!wake) return;
+  // Normalize char by char, remembering where each normalized character came
+  // from in the original string, so the query keeps its real punctuation.
+  let normalized = '';
+  const map: number[] = []; // map[normalized index] = original index
+  let pendingSpace = false;
+  let pos = 0;
+  for (const ch of text.toLowerCase()) {
+    if (/[\p{L}\p{N}]/u.test(ch)) {
+      for (let k = 0; k < ch.length; k++) {
+        normalized += ch[k];
+        map.push(pos);
+      }
+      pendingSpace = false;
+    } else if (!pendingSpace) {
+      normalized += ' ';
+      map.push(pos);
+      pendingSpace = true;
+    }
+    pos += ch.length;
+  }
+  const lead = normalized.length - normalized.trimStart().length;
+  const trimmed = normalized.slice(lead);
+  const trimmedMap = map.slice(lead);
+  if (!trimmed.startsWith(wake)) return;
+  // The wake word must end at a word boundary: end of line or a separator.
+  const after = wake.length;
+  if (after < trimmed.length && trimmed[after] !== ' ') return;
+  if (after >= trimmed.length) return; // nothing left after the wake word
+  // Skip the separator run that followed the wake word in the original text.
+  const isWordChar = (s: string, i: number): boolean =>
+    /[\p{L}\p{N}]/u.test(String.fromCodePoint(s.codePointAt(i)!));
+  let cut = trimmedMap[after];
+  while (cut < text.length && !isWordChar(text, cut)) cut++;
+  const query = text.slice(cut).trim();
+  if (query) void runNlTools(query);
+}
+
 // --- DOM ------------------------------------------------------------------------
 
 /** Looks up a required element, failing fast when the markup and script drift apart. */
@@ -278,6 +473,12 @@ const els = {
   wordReplacement: byId<HTMLInputElement>('wordReplacement'),
   streamConfig: byId<HTMLInputElement>('streamConfig'),
   streamPanel: byId<HTMLElement>('streamPanel'),
+  nlTools: byId<HTMLInputElement>('nlTools'),
+  nlToolsPanel: byId<HTMLElement>('nlToolsPanel'),
+  nlWakeWord: byId<HTMLInputElement>('nlWakeWord'),
+  nlToolsText: byId<HTMLTextAreaElement>('nlToolsText'),
+  nlConfidence: byId<HTMLInputElement>('nlConfidence'),
+  nlStatus: byId<HTMLElement>('nlStatus'),
   streamDefault: byId<HTMLInputElement>('streamDefault'),
   streamOriginal: byId<HTMLInputElement>('streamOriginal'),
   streamNormalized: byId<HTMLInputElement>('streamNormalized'),
@@ -425,6 +626,9 @@ function logFrame(kind: FrameKind, text: string): void {
   msg.textContent = kind === 'pause' ? '⏸ pause (not sent)' : text;
   row.append(time, msg);
   els.frames.append(row);
+  // Tool calls stand apart from the transcript: mark each one with a
+  // separator line underneath.
+  if (kind === 'tool') logSeparator();
   while (els.frames.childElementCount > FRAME_LOG_LIMIT) els.frames.firstElementChild?.remove();
   els.frames.scrollTop = els.frames.scrollHeight;
 }
@@ -532,7 +736,8 @@ interface SendOptions {
  */
 function sendFrame(kind: FrameKind, rawText: string, options: SendOptions = {}): void {
   const { mode = 'default', prefix = '' } = options;
-  const text = prefix + sanitizeForWire(rawText, kind, mode);
+  // Tool call frames carry control characters that must go out verbatim.
+  const text = kind === 'tool' ? prefix + rawText : prefix + sanitizeForWire(rawText, kind, mode);
   if (!text) return;
   if (kind === 'sys') {
     // Local diagnostics only — never queued or sent.
@@ -700,6 +905,8 @@ function onLine(line: TranscriptLine): void {
   }
   const text = line.text.trim();
   if (text) emitStreams('final', text);
+  // Tool processing runs on top of the normal transcription output.
+  maybeRunTools(text);
   if (!sendEvent(SPEECH_ENDED_FRAME)) logFrame('pause', '');
   logSeparator();
 }
@@ -1113,6 +1320,16 @@ bindCheckbox(els.streamOriginal, STREAM_ORIGINAL_KEY);
 bindCheckbox(els.streamNormalized, STREAM_NORMALIZED_KEY);
 els.wordReplacement.addEventListener('change', updateWordReplacementPanel);
 els.streamConfig.addEventListener('change', updateStreamPanel);
+// Natural Language Tool Calling: the toggle shows the panel; each field
+// persists as it is edited. The starter tool block is only used when
+// nothing has been saved yet.
+if (readStorage(NL_TOOLS_TEXT_KEY) === null) els.nlToolsText.value = DEFAULT_TOOL_DEFINITIONS;
+bindCheckbox(els.nlTools, NL_TOOLS_KEY);
+els.nlTools.addEventListener('change', updateNlToolsPanel);
+bindText(els.nlWakeWord, NL_WAKE_WORD_KEY);
+bindText(els.nlToolsText, NL_TOOLS_TEXT_KEY);
+bindText(els.nlConfidence, NL_CONFIDENCE_KEY);
+updateNlToolsPanel();
 els.wrAdd.addEventListener('click', () => {
   els.wrList.append(buildReplacementRow({ target: '', replacement: '' }));
   onReplacementsChanged();
