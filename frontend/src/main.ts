@@ -24,6 +24,17 @@ interface WordReplacement {
   target: string;
   replacement: string;
 }
+/**
+ * One of the streams Stream Configuration can emit: the default wire text,
+ * the model's raw output, or its fully normalized form.
+ */
+type StreamKey = 'default' | 'original' | 'normalized';
+/**
+ * How a frame's text is prepared for the wire: `default` follows the Remove
+ * Punctuation toggle, `raw` sends the text untouched, and `normalize` always
+ * strips punctuation regardless of the toggle.
+ */
+type SanitizeMode = 'default' | 'raw' | 'normalize';
 
 // --- Constants -------------------------------------------------------------------
 
@@ -47,6 +58,9 @@ const OUTPUT_STREAMING_DISABLED_FRAME = '[outputStreamingDisabled]';
 /** Event frames sent when the word replacement toggle changes. */
 const REPLACEMENT_ENABLED_FRAME = '[replacementEnabled]';
 const REPLACEMENT_DISABLED_FRAME = '[replacementDisabled]';
+/** Prefixes marking frames from the extra streams of Stream Configuration. */
+const ORIGINAL_STREAM_PREFIX = '[stream.orig]';
+const NORMALIZED_STREAM_PREFIX = '[stream.norm]';
 /** All event frames — sanitize is bypassed so these markers stay intact. */
 const EVENT_FRAMES = new Set([
   SPEECH_ENDED_FRAME,
@@ -69,6 +83,12 @@ const STREAMED_OUTPUT_KEY = 'streamedOutput';
 const ENABLE_COMMANDS_KEY = 'enableCommands';
 /** Persisted flag: swap words per the replacement list before sending? */
 const WORD_REPLACEMENT_KEY = 'wordReplacement';
+/** Persisted flag: emit the extra original/normalized streams? */
+const STREAM_CONFIG_KEY = 'streamConfig';
+/** Persisted flags for the individual streams of Stream Configuration. */
+const STREAM_DEFAULT_KEY = 'streamDefault';
+const STREAM_ORIGINAL_KEY = 'streamOriginal';
+const STREAM_NORMALIZED_KEY = 'streamNormalized';
 /** Persisted JSON list of {@link WordReplacement} entries. */
 const WORD_REPLACEMENTS_KEY = 'wordReplacements';
 /** Persisted key of the last used model size ({@link ArchKey}). */
@@ -223,6 +243,19 @@ function updateWordReplacementPanel(): void {
   els.wrPanel.hidden = !els.wordReplacement.checked;
 }
 
+/**
+ * Shows the Stream Configuration panel only while the setting is on. When it
+ * turns off, the prefixed streams' deduplication state is cleared so a
+ * re-enable mid-sentence cannot suppress their next frame.
+ */
+function updateStreamPanel(): void {
+  els.streamPanel.hidden = !els.streamConfig.checked;
+  if (!els.streamConfig.checked) {
+    lastSent.original = '';
+    lastSent.normalized = '';
+  }
+}
+
 // --- DOM ------------------------------------------------------------------------
 
 /** Looks up a required element, failing fast when the markup and script drift apart. */
@@ -243,6 +276,11 @@ const els = {
   streamedOutput: byId<HTMLInputElement>('streamedOutput'),
   enableCommands: byId<HTMLInputElement>('enableCommands'),
   wordReplacement: byId<HTMLInputElement>('wordReplacement'),
+  streamConfig: byId<HTMLInputElement>('streamConfig'),
+  streamPanel: byId<HTMLElement>('streamPanel'),
+  streamDefault: byId<HTMLInputElement>('streamDefault'),
+  streamOriginal: byId<HTMLInputElement>('streamOriginal'),
+  streamNormalized: byId<HTMLInputElement>('streamNormalized'),
   wrPanel: byId<HTMLElement>('wrPanel'),
   wrList: byId<HTMLElement>('wrList'),
   wrAdd: byId<HTMLButtonElement>('wrAdd'),
@@ -454,11 +492,22 @@ function applyWordReplacements(text: string): string {
  * replacements are sanitized like the rest of the text. Event control frames
  * such as `[speechEnded]` are exempt — stripping their punctuation would
  * destroy the markers — and diagnostics are never replaced.
+ *
+ * The mode overrides the punctuation handling: `raw` skips every
+ * transformation (the Original Stream), `normalize` always strips punctuation
+ * regardless of the toggle (the Normalized Stream), and `default` follows the
+ * Remove Punctuation setting as usual.
  */
-function sanitizeForWire(text: string, kind: FrameKind = 'final'): string {
+function sanitizeForWire(
+  text: string,
+  kind: FrameKind = 'final',
+  mode: SanitizeMode = 'default',
+): string {
   if (EVENT_FRAMES.has(text)) return text;
-  let out = kind === 'sys' ? text : applyWordReplacements(text);
-  if (!els.sanitize.checked) return out;
+  let out = kind === 'sys' || mode === 'raw' ? text : applyWordReplacements(text);
+  const removePunctuation =
+    mode === 'normalize' ? true : mode === 'raw' ? false : els.sanitize.checked;
+  if (!removePunctuation) return out;
   return out
     .toLowerCase()
     .replace(/[^\p{L}\p{N} ]+/gu, '')
@@ -467,12 +516,23 @@ function sanitizeForWire(text: string, kind: FrameKind = 'final'): string {
 }
 
 /**
- * Sends one text frame to the WebSocket server, sanitized per the toggle.
- * Queues while the socket is down (and asks for a reconnect), so
- * transcription never stalls on the connection.
+ * Options for {@link sendFrame}: how the text is sanitized, and an optional
+ * prefix (e.g. `[stream.orig]`) prepended after sanitizing, so the marker
+ * itself is never mangled by punctuation removal.
  */
-function sendFrame(kind: FrameKind, rawText: string): void {
-  const text = sanitizeForWire(rawText);
+interface SendOptions {
+  mode?: SanitizeMode;
+  prefix?: string;
+}
+
+/**
+ * Sends one text frame to the WebSocket server, sanitized per the toggle (or
+ * the given mode). Queues while the socket is down (and asks for a
+ * reconnect), so transcription never stalls on the connection.
+ */
+function sendFrame(kind: FrameKind, rawText: string, options: SendOptions = {}): void {
+  const { mode = 'default', prefix = '' } = options;
+  const text = prefix + sanitizeForWire(rawText, kind, mode);
   if (!text) return;
   if (kind === 'sys') {
     // Local diagnostics only — never queued or sent.
@@ -531,8 +591,11 @@ let running = false;
  * until an `enable` command (or a fresh start) lifts the suppression.
  */
 let sending = true;
-/** Last partial sent, so frames are only pushed when the sentence grows. */
-let lastSent = '';
+/**
+ * Last partial sent per stream (the prefixed wire text), so frames are only
+ * pushed when a stream's output actually grows.
+ */
+const lastSent: Record<StreamKey, string> = { default: '', original: '', normalized: '' };
 
 /** Reads the persisted model size, falling back to the default if unknown. */
 function loadArchPreference(): ArchKey {
@@ -557,6 +620,47 @@ function setProgress(fraction: number | null): void {
 }
 
 /**
+ * Sends one piece of recognized text on a single stream, skipping streams
+ * whose sanitized text came out empty (e.g. the normalized copy of a grunt),
+ * and deduplicating partials on what actually goes on the wire, so "Hello,"
+ * followed by "Hello" does not send the sanitized "hello" twice.
+ */
+function emitStream(
+  key: StreamKey,
+  kind: 'partial' | 'final',
+  text: string,
+  mode: SanitizeMode,
+  prefix: string,
+): void {
+  const content = sanitizeForWire(text, kind, mode);
+  if (!content) return;
+  const wire = prefix + content;
+  if (kind === 'partial' && wire === lastSent[key]) return;
+  lastSent[key] = wire;
+  sendFrame(kind, text, { mode, prefix });
+}
+
+/**
+ * Emits one piece of recognized text on every enabled stream. With Stream
+ * Configuration off, only the Default Stream is sent, regardless of the panel
+ * checkboxes — the prefixed streams never go out. With it on, each of the
+ * three streams is sent independently.
+ */
+function emitStreams(kind: 'partial' | 'final', text: string): void {
+  if (!els.streamConfig.checked) {
+    emitStream('default', kind, text, 'default', '');
+    return;
+  }
+  if (els.streamDefault.checked) emitStream('default', kind, text, 'default', '');
+  if (els.streamOriginal.checked) {
+    emitStream('original', kind, text, 'raw', ORIGINAL_STREAM_PREFIX);
+  }
+  if (els.streamNormalized.checked) {
+    emitStream('normalized', kind, text, 'normalize', NORMALIZED_STREAM_PREFIX);
+  }
+}
+
+/**
  * Called with the in-progress text of the sentence currently being spoken:
  * sends the continually expanding sentence over the WebSocket.
  */
@@ -565,13 +669,7 @@ function onPartial(text: string): void {
   if (!sending || !els.streamedOutput.checked) return;
   const trimmed = text.trim();
   if (!trimmed) return;
-  // Deduplicate on what actually goes on the wire, so "Hello," followed by
-  // "Hello" does not send the sanitized "hello" twice.
-  const wire = sanitizeForWire(trimmed, 'partial');
-  if (wire && wire !== lastSent) {
-    lastSent = wire;
-    sendFrame('partial', trimmed);
-  }
+  emitStreams('partial', trimmed);
 }
 
 /**
@@ -593,7 +691,7 @@ function sendEvent(frame: string): boolean {
  */
 function onLine(line: TranscriptLine): void {
   els.live.textContent = '';
-  lastSent = '';
+  for (const key of Object.keys(lastSent) as StreamKey[]) lastSent[key] = '';
   if (!sending) {
     // Muted: the model still hears the line, but nothing is sent.
     logFrame('pause', '');
@@ -601,7 +699,7 @@ function onLine(line: TranscriptLine): void {
     return;
   }
   const text = line.text.trim();
-  if (text) sendFrame('final', text);
+  if (text) emitStreams('final', text);
   if (!sendEvent(SPEECH_ENDED_FRAME)) logFrame('pause', '');
   logSeparator();
 }
@@ -629,7 +727,7 @@ function setSending(enabled: boolean): void {
   sending = enabled;
   if (!enabled) {
     els.live.textContent = '';
-    lastSent = '';
+    for (const key of Object.keys(lastSent) as StreamKey[]) lastSent[key] = '';
   }
   els.micLabel.textContent = enabled ? 'Listening' : 'Muted';
   setStatus(
@@ -1009,7 +1107,12 @@ bindCheckbox(els.sanitize, SANITIZE_KEY, onRemovePunctuationToggled);
 bindCheckbox(els.streamedOutput, STREAMED_OUTPUT_KEY, onOutputStreamingToggled);
 bindCheckbox(els.enableCommands, ENABLE_COMMANDS_KEY);
 bindCheckbox(els.wordReplacement, WORD_REPLACEMENT_KEY);
+bindCheckbox(els.streamConfig, STREAM_CONFIG_KEY);
+bindCheckbox(els.streamDefault, STREAM_DEFAULT_KEY);
+bindCheckbox(els.streamOriginal, STREAM_ORIGINAL_KEY);
+bindCheckbox(els.streamNormalized, STREAM_NORMALIZED_KEY);
 els.wordReplacement.addEventListener('change', updateWordReplacementPanel);
+els.streamConfig.addEventListener('change', updateStreamPanel);
 els.wrAdd.addEventListener('click', () => {
   els.wrList.append(buildReplacementRow({ target: '', replacement: '' }));
   onReplacementsChanged();
@@ -1017,6 +1120,7 @@ els.wrAdd.addEventListener('click', () => {
 });
 renderReplacements();
 updateWordReplacementPanel();
+updateStreamPanel();
 
 // --- Settings dialog -----------------------------------------------------------------
 

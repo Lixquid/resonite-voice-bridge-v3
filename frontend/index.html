@@ -124,6 +124,12 @@
             <small class="opt-sub">Swap words for replacements before they are sent over the WebSocket. Manage the list in the panel below.</small>
           </span>
         </label>
+        <label class="opt">
+          <input type="checkbox" id="streamConfig" />
+          <span>Stream Configuration
+            <small class="opt-sub">Send additional copies of the recognized text as separate streams. Configure them in the panel below.</small>
+          </span>
+        </label>
       </section>
 
       <section id="wrPanel" hidden>
@@ -135,6 +141,37 @@
         </p>
         <div class="wr-list" id="wrList"></div>
         <button id="wrAdd" class="btn btn--accent" type="button">+ Add Entry</button>
+      </section>
+
+      <section id="streamPanel" hidden>
+        <h2>Stream Configuration</h2>
+        <p class="panel-hint">
+          Each enabled stream sends its own copy of the recognized text.
+          The <strong>Default Stream</strong> is sent as-is and respects
+          &quot;Remove Punctuation&quot;. The <strong>Original Stream</strong> sends the text
+          straight from the model with <code>[stream.orig]</code> in front,
+          ignoring &quot;Remove Punctuation&quot;. The <strong>Normalized Stream</strong> sends
+          the text with punctuation removed (always, regardless of the setting)
+          with <code>[stream.norm]</code> in front.
+        </p>
+        <label class="opt">
+          <input type="checkbox" id="streamDefault" checked />
+          <span>Default Stream
+            <small class="opt-sub">The stream with no prefix — what is emitted by default.</small>
+          </span>
+        </label>
+        <label class="opt opt--sub">
+          <input type="checkbox" id="streamOriginal" />
+          <span>Original Stream
+            <small class="opt-sub">The model's raw text, untransformed, prefixed with <code>[stream.orig]</code>.</small>
+          </span>
+        </label>
+        <label class="opt opt--sub">
+          <input type="checkbox" id="streamNormalized" />
+          <span>Normalized Stream
+            <small class="opt-sub">The text with punctuation removed, prefixed with <code>[stream.norm]</code>.</small>
+          </span>
+        </label>
       </section>
 
       <section>

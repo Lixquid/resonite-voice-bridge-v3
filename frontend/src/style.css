@@ -226,12 +226,18 @@ button {
   opacity: 0.85;
 }
 
-/* --- Word Replacement panel -------------------------------------------- */
+/* --- Word Replacement / Stream Configuration panels -------------------- */
 
-.wr-hint {
+.wr-hint,
+.panel-hint {
   margin: 0 0 0.75rem;
   font-size: 0.85rem;
   color: var(--muted);
+}
+
+/* Options nested inside a panel, indented under their parent setting. */
+.opt--sub {
+  margin-left: 1.6rem;
 }
 
 .wr-list {
