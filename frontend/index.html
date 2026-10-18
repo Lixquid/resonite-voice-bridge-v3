@@ -161,7 +161,10 @@
           straight from the model with <code>[stream.orig]</code> in front,
           ignoring &quot;Remove Punctuation&quot;. The <strong>Normalized Stream</strong> sends
           the text with punctuation removed (always, regardless of the setting)
-          with <code>[stream.norm]</code> in front.
+          with <code>[stream.norm]</code> in front. The <strong>Translation Stream</strong> sends
+          a machine translation of the text with <code>[stream.trans.JP]</code> or
+          <code>[stream.trans.EN]</code> in front, depending on the direction chosen in the
+          Translation panel below.
         </p>
         <label class="opt">
           <input type="checkbox" id="streamDefault" checked />
@@ -181,6 +184,34 @@
             <small class="opt-sub">The text with punctuation removed, prefixed with <code>[stream.norm]</code>.</small>
           </span>
         </label>
+        <label class="opt opt--sub">
+          <input type="checkbox" id="streamTranslation" />
+          <span>Translation Stream
+            <small class="opt-sub">A machine translation of the text, prefixed with <code>[stream.trans.JP]</code> (EN → JP) or <code>[stream.trans.EN]</code> (JP → EN). Configure it in the panel below.</small>
+          </span>
+        </label>
+      </section>
+
+      <section id="translationPanel" hidden>
+        <h2>Translation</h2>
+        <p class="panel-hint">
+          The Translation Stream translates the recognized text locally in the
+          browser with OPUS-MT models (run by Transformers.js in a worker).
+          The models are downloaded by the desktop client into its cache
+          folder and served from there — nothing is fetched from the internet
+          during translation, and nothing runs while the direction below is
+          set to Disabled.
+        </p>
+        <div class="nl-field">
+          <label for="translationDirection">Translation Direction</label>
+          <select id="translationDirection">
+            <option value="off">Disabled</option>
+            <option value="en-jp">English → Japanese</option>
+            <option value="jp-en">Japanese → English</option>
+          </select>
+          <small class="nl-sub">EN → JP output goes out as <code>[stream.trans.JP]</code>; JP → EN output as <code>[stream.trans.EN]</code>. The model for the chosen direction is loaded on first use.</small>
+        </div>
+        <p class="nl-status" id="translationStatus"></p>
       </section>
 
       <section id="nlToolsPanel" hidden>
@@ -233,6 +264,8 @@
             <li><button type="button" class="doc-event-btn" data-event="[replacementDisabled]">[replacementDisabled]</button> - Sent when the word replacement feature has been disabled.</li>
             <li><button type="button" class="doc-event-btn" data-event="[naturalLanguageToolsEnabled]">[naturalLanguageToolsEnabled]</button> - Sent when the natural language tool calling feature has been enabled.</li>
             <li><button type="button" class="doc-event-btn" data-event="[naturalLanguageToolsDisabled]">[naturalLanguageToolsDisabled]</button> - Sent when the natural language tool calling feature has been disabled.</li>
+            <li><button type="button" class="doc-event-btn" data-event="[translationEnabled]">[translationEnabled]</button> - Sent when the translation feature has been enabled.</li>
+            <li><button type="button" class="doc-event-btn" data-event="[translationDisabled]">[translationDisabled]</button> - Sent when the translation feature has been disabled.</li>
           </ul>
         </details>
         <details class="doc" id="doc-commands">
@@ -257,6 +290,10 @@
             <li><button type="button" class="doc-event-btn" data-event="naturalLanguageToolsDisableTool=TOOL_NAME">naturalLanguageToolsDisableTool=TOOL_NAME</button> - Disables the specific tool with the given name.</li>
             <li><button type="button" class="doc-event-btn" data-event="naturalLanguageToolsEnableTool=TOOL_NAME">naturalLanguageToolsEnableTool=TOOL_NAME</button> - Re-enables the specific tool with the given name.</li>
             <li><button type="button" class="doc-event-btn" data-event="naturalLanguageToolsEnableOnlyTools=TOOL_NAME,TOOL_NAME2">naturalLanguageToolsEnableOnlyTools=TOOL_NAME,TOOL_NAME2</button> - Enables the given tools, and disables all tools not mentioned.</li>
+            <li><button type="button" class="doc-event-btn" data-event="translationToggle">translationToggle</button> - Toggles the Translation Stream on and off.</li>
+            <li><button type="button" class="doc-event-btn" data-event="translationEnable">translationEnable</button> - Enables the Translation Stream.</li>
+            <li><button type="button" class="doc-event-btn" data-event="translationDisable">translationDisable</button> - Disables the Translation Stream.</li>
+            <li><button type="button" class="doc-event-btn" data-event="translationDirection=EN_JP|JP_EN|OFF">translationDirection=EN_JP|JP_EN|OFF</button> - Sets the translation direction (EN → JP, JP → EN, or disabled).</li>
           </ul>
         </details>
       </section>

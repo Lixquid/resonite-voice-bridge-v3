@@ -315,6 +315,7 @@ button {
 }
 
 .nl-field input,
+.nl-field select,
 .nl-field textarea {
   width: 100%;
   padding: 0.45rem 0.65rem;
@@ -323,6 +324,11 @@ button {
   background: var(--panel-strong);
   color: var(--text);
   font: 0.9rem var(--mono);
+}
+
+.nl-field select:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 .nl-field textarea {

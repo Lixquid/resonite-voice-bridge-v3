@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>translate e2e</title></head>
+  <body>
+    <script type="module">
+      import { setTranslationDirection, translateText } from '/src/translate.ts';
+      window.results = { logs: [], status: [] };
+      window.runENJP = async () => {
+        const { logs, status } = window.results;
+        setTranslationDirection('en-jp', {
+          onStatus: (s) => status.push(s),
+          onLog: (m, e) => logs.push((e ? 'ERR: ' : '') + m),
+        });
+        const t0 = performance.now();
+        const out1 = await translateText('Hello, how are you today?', 'final');
+        const t1 = performance.now();
+        const out2 = await translateText("I don't think we should spawn 3 items.", 'final');
+        const t2 = performance.now();
+        return {
+          out1, out2,
+          firstMs: Math.round(t1 - t0), secondMs: Math.round(t2 - t1),
+          logs: [...logs], status: [...status],
+        };
+      };
+      window.runJPEN = async () => {
+        const { logs, status } = window.results;
+        setTranslationDirection('jp-en', {
+          onStatus: (s) => status.push(s),
+          onLog: (m, e) => logs.push((e ? 'ERR: ' : '') + m),
+        });
+        const out = await translateText('こんにちは、お元気ですか？', 'final');
+        return { out, logs: [...logs] };
+      };
+      // Off: must release everything without errors.
+      window.runOff = async () => {
+        setTranslationDirection(null, { onStatus: () => {}, onLog: (m) => window.results.logs.push(m) });
+        const out = await translateText('ignored', 'final');
+        return { out, released: true };
+      };
+      // Stale partials must resolve null.
+      window.runStale = async () => {
+        const p1 = translateText('Hello', 'partial');
+        const p2 = translateText('Hello how', 'partial');
+        const [r1, r2] = await Promise.all([p1, p2]);
+        return { r1, r2 };
+      };
+    </script>
+  </body>
+</html>

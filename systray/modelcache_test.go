@@ -31,6 +31,11 @@ func TestCacheRelPath(t *testing.T) {
 		{"/models/medium_streaming/encoder.ort", "models/medium_streaming/encoder.ort", true},
 		{"/needle3/needle3.cact", "needle3/needle3.cact", true},
 		{"/needle3/wasm/needle.js", "needle3/wasm/needle.js", true},
+		{"/translation/lib/transformers.min.js", "translation/lib/transformers.min.js", true},
+		{"/translation/models/opus-tatoeba-en-ja/config.json", "translation/models/opus-tatoeba-en-ja/config.json", true},
+		{"/translation/models/opus-mt-ja-en/onnx/encoder_model_quantized.onnx", "translation/models/opus-mt-ja-en/onnx/encoder_model_quantized.onnx", true},
+		{"/translation", "", true},
+		{"/translation/", "", true},
 		{"/models", "", true},
 		{"/models/", "", true},
 		{"/needle3", "", true},
@@ -50,6 +55,68 @@ func TestCacheRelPath(t *testing.T) {
 		if ok != c.ok || rel != c.rel {
 			t.Errorf("cacheRelPath(%q) = (%q, %v), want (%q, %v)", c.urlPath, rel, ok, c.rel, c.ok)
 		}
+	}
+}
+
+// TestServeTranslationLazyDownload verifies translation assets are fetched
+// lazily: an approved file that is not yet cached is downloaded from the
+// pinned source on the first request and served from the cache afterwards,
+// while paths that are not approved assets are refused without any download.
+func TestServeTranslationLazyDownload(t *testing.T) {
+	dir := withTestCacheDir(t)
+
+	var downloads int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		downloads++
+		_, _ = w.Write([]byte("asset:" + r.URL.Path))
+	}))
+	t.Cleanup(server.Close)
+
+	// Retarget the pinned sources at the test server for the duration.
+	savedLib, savedEn, savedJa := transformersJSBase, translationEnJapBase, translationJaEnBase
+	transformersJSBase = server.URL + "@huggingface/transformers@" + transformersJSVersion + "/dist"
+	translationEnJapBase = server.URL + "/Kadonox/opus-tatoeba-en-ja-onnx/resolve/" + translationEnJapRev
+	translationJaEnBase = server.URL + "/Xenova/opus-mt-ja-en/resolve/" + translationJaEnRev
+	t.Cleanup(func() { transformersJSBase, translationEnJapBase, translationJaEnBase = savedLib, savedEn, savedJa })
+
+	get := func(urlPath string) *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest("GET", urlPath, nil)
+		if handled := serveModelCache(recorder, request); !handled {
+			t.Fatalf("serveModelCache(%q) was not handled by the cache", urlPath)
+		}
+		return recorder
+	}
+
+	// An approved asset downloads on demand and is served with its contents.
+	recorder := get("/translation/models/opus-tatoeba-en-ja/config.json")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("first request status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	if body := recorder.Body.String(); body != "asset:/Kadonox/opus-tatoeba-en-ja-onnx/resolve/"+translationEnJapRev+"/config.json" {
+		t.Errorf("first request body = %q", body)
+	}
+	// The second request is served from the cache: no second download.
+	if recorder := get("/translation/models/opus-tatoeba-en-ja/config.json"); recorder.Code != http.StatusOK {
+		t.Errorf("second request status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	if downloads != 1 {
+		t.Errorf("downloads = %d, want 1 (the second request must be served from the cache)", downloads)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "translation", "models", "opus-tatoeba-en-ja", "config.json")); err != nil {
+		t.Errorf("asset not stored in the cache layout: %v", err)
+	}
+
+	// A path that is not an approved asset: 404, and no download attempt.
+	recorder = get("/translation/models/opus-tatoeba-en-ja/vocab.json")
+	if recorder.Code != http.StatusNotFound {
+		t.Errorf("non-approved asset status = %d, want %d", recorder.Code, http.StatusNotFound)
+	}
+	if recorder = get("/translation/models/opus-mt-ja-en/../../../secret.txt"); recorder.Code != http.StatusNotFound {
+		t.Errorf("traversal under /translation/ status = %d, want %d", recorder.Code, http.StatusNotFound)
+	}
+	if downloads != 1 {
+		t.Errorf("downloads = %d, want 1 (non-approved paths must not trigger downloads)", downloads)
 	}
 }
 

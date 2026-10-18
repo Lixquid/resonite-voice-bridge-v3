@@ -97,6 +97,10 @@ export default defineConfig({
       '/models/small_streaming': { target: 'http://localhost:6789' },
       '/models/medium_streaming': { target: 'http://localhost:6789' },
       '/needle3': { target: 'http://localhost:6789' },
+      // The translation engine (Transformers.js + OPUS-MT models) lives in
+      // the same desktop cache folder, downloaded on demand (see
+      // systray/modelcache.go).
+      '/translation': { target: 'http://localhost:6789' },
     },
   },
   build: {

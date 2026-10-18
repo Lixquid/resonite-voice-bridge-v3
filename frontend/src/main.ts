@@ -10,6 +10,11 @@ import {
 } from './moonshine';
 import './style.css';
 import { needlePrewarm, needleRun, type NeedleCall } from './needle';
+import {
+  setTranslationDirection,
+  translateText,
+  type TranslationDirection as EngineDirection,
+} from './translate';
 
 // --- Types ---------------------------------------------------------------------
 
@@ -36,6 +41,12 @@ type StreamKey = 'default' | 'original' | 'normalized';
  * strips punctuation regardless of the toggle.
  */
 type SanitizeMode = 'default' | 'raw' | 'normalize';
+/**
+ * The Translation Stream setting: `off` disables translation entirely (no
+ * model is loaded and nothing is queued); the other values pick the OPUS-MT
+ * direction and with it the prefixed stream the output goes out on.
+ */
+type TranslationSetting = 'off' | EngineDirection;
 
 // --- Constants -------------------------------------------------------------------
 
@@ -62,9 +73,19 @@ const REPLACEMENT_DISABLED_FRAME = '[replacementDisabled]';
 /** Event frames sent when the natural language tool calling toggle changes. */
 const NL_TOOLS_ENABLED_FRAME = '[naturalLanguageToolsEnabled]';
 const NL_TOOLS_DISABLED_FRAME = '[naturalLanguageToolsDisabled]';
+/** Event frames sent when translation (the Translation Stream) turns on or off. */
+const TRANSLATION_ENABLED_FRAME = '[translationEnabled]';
+const TRANSLATION_DISABLED_FRAME = '[translationDisabled]';
 /** Prefixes marking frames from the extra streams of Stream Configuration. */
 const ORIGINAL_STREAM_PREFIX = '[stream.orig]';
 const NORMALIZED_STREAM_PREFIX = '[stream.norm]';
+/**
+ * Prefixes marking frames from the Translation Stream: the direction decides
+ * which one applies — EN → JP output goes to `[stream.trans.JP]`, JP → EN
+ * output to `[stream.trans.EN]`.
+ */
+const TRANSLATION_JP_STREAM_PREFIX = '[stream.trans.JP]';
+const TRANSLATION_EN_STREAM_PREFIX = '[stream.trans.EN]';
 /** Frame prefix marking a natural-language tool call (see needle.ts). */
 const TOOL_SEP_FRAME = '[tool.sep]';
 /** ASCII group/record separators framing tool call keys and pairs. */
@@ -101,6 +122,8 @@ const EVENT_FRAMES = new Set([
   REPLACEMENT_DISABLED_FRAME,
   NL_TOOLS_ENABLED_FRAME,
   NL_TOOLS_DISABLED_FRAME,
+  TRANSLATION_ENABLED_FRAME,
+  TRANSLATION_DISABLED_FRAME,
 ]);
 /** Persisted flag: send event frames (e.g. {@link SPEECH_ENDED_FRAME})? Default on. */
 const SEND_EVENTS_KEY = 'sendEvents';
@@ -118,6 +141,12 @@ const STREAM_CONFIG_KEY = 'streamConfig';
 const STREAM_DEFAULT_KEY = 'streamDefault';
 const STREAM_ORIGINAL_KEY = 'streamOriginal';
 const STREAM_NORMALIZED_KEY = 'streamNormalized';
+/** Persisted flag: emit the Translation Stream? */
+const STREAM_TRANSLATION_KEY = 'streamTranslation';
+/** Persisted translation direction: 'off', {@link EngineDirection}, or invalid. */
+const TRANSLATION_DIRECTION_KEY = 'translationDirection';
+/** How long to wait after the last partial update before translating it. */
+const TRANSLATION_PARTIAL_DEBOUNCE_MS = 500;
 /** Persisted JSON list of {@link WordReplacement} entries. */
 const WORD_REPLACEMENTS_KEY = 'wordReplacements';
 /** Persisted flag: run wake-word text through the Needle 3 engine? */
@@ -300,6 +329,67 @@ function updateStreamPanel(): void {
     lastSent.normalized = '';
   }
 }
+
+/** Reads the persisted translation direction, tolerating unknown values. */
+function loadTranslationDirection(): TranslationSetting {
+  const saved = readStorage(TRANSLATION_DIRECTION_KEY) as TranslationSetting | null;
+  return saved === 'en-jp' || saved === 'jp-en' || saved === 'off' ? saved : 'off';
+}
+
+/** True when translation is both enabled and pointed at a direction. */
+function translationActive(): boolean {
+  return els.streamTranslation.checked && els.translationDirection.value !== 'off';
+}
+
+/** The engine direction matching the current setting (only when active). */
+function translationEngineDirection(): EngineDirection | null {
+  return translationActive() ? (els.translationDirection.value as EngineDirection) : null;
+}
+
+/** The wire prefix for the current direction (only when active). */
+function translationStreamPrefix(): string | null {
+  const dir = els.translationDirection.value;
+  if (!translationActive()) return null;
+  return dir === 'en-jp' ? TRANSLATION_JP_STREAM_PREFIX : TRANSLATION_EN_STREAM_PREFIX;
+}
+
+/** Sets the Translation panel status line (model downloads, errors). */
+function setTranslationStatus(text: string): void {
+  els.translationStatus.textContent = text;
+}
+
+/**
+ * Applies the current translation setting: shows or hides the panel, loads
+ * or releases the engine (lazy — nothing runs while disabled or off), and
+ * sends the enabled/disabled event frame whenever the effective state
+ * changes. `announce` is false during startup restore, where state changes
+ * must not emit frames.
+ */
+function applyTranslationState(announce = true): void {
+  els.translationPanel.hidden = !els.streamTranslation.checked;
+  lastSentTranslation = '';
+  cancelPartialTranslation();
+  setTranslationDirection(translationEngineDirection(), translationHandlers);
+  const active = translationActive();
+  if (announce && active !== translationWasActive) {
+    sendEvent(active ? TRANSLATION_ENABLED_FRAME : TRANSLATION_DISABLED_FRAME);
+  }
+  translationWasActive = active;
+}
+
+/** Change handler for the Translation Stream toggle. */
+function onTranslationToggled(): void {
+  applyTranslationState();
+}
+
+/**
+ * Progress and log plumbing for the translation engine: progress goes to the
+ * panel's status line, errors and diagnostics to the event log.
+ */
+const translationHandlers = {
+  onStatus: setTranslationStatus,
+  onLog: (message: string, isError?: boolean) => logEvent(message, isError ? 'error' : 'sys'),
+};
 
 /**
  * Downloads the Needle 3 engine and model in the background so the first
@@ -606,6 +696,10 @@ const els = {
   streamDefault: byId<HTMLInputElement>('streamDefault'),
   streamOriginal: byId<HTMLInputElement>('streamOriginal'),
   streamNormalized: byId<HTMLInputElement>('streamNormalized'),
+  streamTranslation: byId<HTMLInputElement>('streamTranslation'),
+  translationPanel: byId<HTMLElement>('translationPanel'),
+  translationDirection: byId<HTMLSelectElement>('translationDirection'),
+  translationStatus: byId<HTMLElement>('translationStatus'),
   wrPanel: byId<HTMLElement>('wrPanel'),
   wrList: byId<HTMLElement>('wrList'),
   wrAdd: byId<HTMLButtonElement>('wrAdd'),
@@ -929,6 +1023,17 @@ let sending = true;
  * pushed when a stream's output actually grows.
  */
 const lastSent: Record<StreamKey, string> = { default: '', original: '', normalized: '' };
+/**
+ * Last partial sent on the Translation Stream (prefixed wire text), so
+ * translated interim results are only pushed when they actually change.
+ * Kept apart from {@link lastSent}: the translation is different text, not a
+ * sanitized copy of the transcript.
+ */
+let lastSentTranslation = '';
+/** The translation effective state last announced with an event frame. */
+let translationWasActive = false;
+/** Timer holding back the interim translation until the partial settles. */
+let partialTranslationTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Reads the persisted model size, falling back to the default if unknown. */
 function loadArchPreference(): ArchKey {
@@ -994,6 +1099,62 @@ function emitStreams(kind: 'partial' | 'final', text: string): void {
 }
 
 /**
+ * Cancels the pending interim translation, if any: the timer holds back the
+ * latest partial while the sentence is still growing, and a final line (or a
+ * settings change) makes translating it pointless.
+ */
+function cancelPartialTranslation(): void {
+  if (partialTranslationTimer === null) return;
+  clearTimeout(partialTranslationTimer);
+  partialTranslationTimer = null;
+}
+
+/**
+ * Waits for the partial to settle, then translates the latest interim text.
+ * The debounce (see {@link TRANSLATION_PARTIAL_DEBOUNCE_MS}) keeps the
+ * translation engine from chasing every partial update; superseded requests
+ * are discarded inside the translation module.
+ */
+function schedulePartialTranslation(text: string): void {
+  if (partialTranslationTimer !== null) clearTimeout(partialTranslationTimer);
+  partialTranslationTimer = setTimeout(() => {
+    partialTranslationTimer = null;
+    void submitTranslation(text, 'partial');
+  }, TRANSLATION_PARTIAL_DEBOUNCE_MS);
+}
+
+/**
+ * Translates one piece of text (partial or final) and emits the result on
+ * the Translation Stream — `[stream.trans.JP]` for EN → JP and
+ * `[stream.trans.EN]` for JP → EN. Null results (superseded, dropped, or
+ * failed) are silently ignored; failures were already logged by the engine.
+ * Direction changes while a request is in flight are detected here so the
+ * old direction's output cannot land on the new one's stream.
+ */
+async function submitTranslation(text: string, kind: 'partial' | 'final'): Promise<void> {
+  const dir = translationEngineDirection();
+  const prefix = translationStreamPrefix();
+  if (!dir || !prefix) return;
+  const result = await translateText(text, kind);
+  if (result === null) return;
+  if (!sending || dir !== translationEngineDirection()) return; // muted or re-targeted
+  emitTranslation(kind, prefix, result);
+}
+
+/**
+ * Sends one translated text on the Translation Stream. Translations go out
+ * raw (like the Original Stream): the text is already in the target language
+ * and never run through word replacement or punctuation removal. Partials
+ * are deduplicated against the last wire text actually sent.
+ */
+function emitTranslation(kind: 'partial' | 'final', prefix: string, text: string): void {
+  const wire = prefix + text;
+  if (kind === 'partial' && wire === lastSentTranslation) return;
+  lastSentTranslation = wire;
+  sendFrame(kind, text, { mode: 'raw', prefix });
+}
+
+/**
  * Called with the in-progress text of the sentence currently being spoken:
  * sends the continually expanding sentence over the WebSocket.
  */
@@ -1003,6 +1164,7 @@ function onPartial(text: string): void {
   const trimmed = text.trim();
   if (!trimmed) return;
   emitStreams('partial', trimmed);
+  if (translationActive()) schedulePartialTranslation(trimmed);
 }
 
 /**
@@ -1025,6 +1187,8 @@ function sendEvent(frame: string): boolean {
 function onLine(line: TranscriptLine): void {
   els.live.textContent = '';
   for (const key of Object.keys(lastSent) as StreamKey[]) lastSent[key] = '';
+  lastSentTranslation = '';
+  cancelPartialTranslation();
   if (!sending) {
     // Muted: the model still hears the line, but nothing is sent.
     logFrame('pause', '');
@@ -1033,7 +1197,8 @@ function onLine(line: TranscriptLine): void {
   }
   const text = line.text.trim();
   if (text) emitStreams('final', text);
-  // Tool processing runs on top of the normal transcription output.
+  // Translation and tool processing run on top of the normal output.
+  if (text && translationActive()) void submitTranslation(text, 'final');
   maybeRunTools(text);
   if (!sendEvent(SPEECH_ENDED_FRAME)) logFrame('pause', '');
   logSeparator();
@@ -1063,6 +1228,8 @@ function setSending(enabled: boolean): void {
   if (!enabled) {
     els.live.textContent = '';
     for (const key of Object.keys(lastSent) as StreamKey[]) lastSent[key] = '';
+    lastSentTranslation = '';
+    cancelPartialTranslation();
   }
   els.micLabel.textContent = enabled ? 'Listening' : 'Muted';
   setStatus(
@@ -1147,6 +1314,15 @@ function setToggle(
   onChange();
 }
 
+/**
+ * Parses a `translationDirection` command argument into a setting value;
+ * returns null for anything else.
+ */
+function parseTranslationDirection(arg: string): TranslationSetting | null {
+  const value = arg.toUpperCase();
+  return value === 'EN_JP' ? 'en-jp' : value === 'JP_EN' ? 'jp-en' : value === 'OFF' ? 'off' : null;
+}
+
 /** Runs one relay command; returns whether it was recognized. */
 function runCommand(command: string): boolean {
   // Commands that take arguments use COMMAND=ARGS, e.g. tool enable/disable.
@@ -1155,6 +1331,17 @@ function runCommand(command: string): boolean {
     const name = command.slice(0, equals);
     const arg = command.slice(equals + 1).trim();
     switch (name) {
+      case 'translationDirection': {
+        const value = parseTranslationDirection(arg);
+        if (!value) {
+          logEvent(`Translation: unknown direction "${arg}" (use EN_JP, JP_EN, or OFF).`, 'error');
+          return true;
+        }
+        els.translationDirection.value = value;
+        writeStorage(TRANSLATION_DIRECTION_KEY, value);
+        applyTranslationState();
+        return true;
+      }
       case 'naturalLanguageToolsEnableTool':
         if (arg) enableNlTool(arg);
         return true;
@@ -1229,6 +1416,20 @@ function runCommand(command: string): boolean {
       return true;
     case 'naturalLanguageToolsDisable':
       setToggle(els.nlTools, false, NL_TOOLS_KEY, onNlToolsToggled);
+      return true;
+    case 'translationToggle':
+      setToggle(
+        els.streamTranslation,
+        !els.streamTranslation.checked,
+        STREAM_TRANSLATION_KEY,
+        onTranslationToggled,
+      );
+      return true;
+    case 'translationEnable':
+      setToggle(els.streamTranslation, true, STREAM_TRANSLATION_KEY, onTranslationToggled);
+      return true;
+    case 'translationDisable':
+      setToggle(els.streamTranslation, false, STREAM_TRANSLATION_KEY, onTranslationToggled);
       return true;
     default:
       return false;
@@ -1486,6 +1687,13 @@ bindCheckbox(els.streamConfig, STREAM_CONFIG_KEY);
 bindCheckbox(els.streamDefault, STREAM_DEFAULT_KEY);
 bindCheckbox(els.streamOriginal, STREAM_ORIGINAL_KEY);
 bindCheckbox(els.streamNormalized, STREAM_NORMALIZED_KEY);
+bindCheckbox(els.streamTranslation, STREAM_TRANSLATION_KEY, onTranslationToggled);
+// Translation direction: persisted and applied on change — the same path the
+// relay commands take (set the value, persist, re-apply the engine state).
+els.translationDirection.addEventListener('change', () => {
+  writeStorage(TRANSLATION_DIRECTION_KEY, els.translationDirection.value);
+  applyTranslationState();
+});
 els.wordReplacement.addEventListener('change', updateWordReplacementPanel);
 els.streamConfig.addEventListener('change', updateStreamPanel);
 // Natural Language Tool Calling: the toggle shows the panel; each field
@@ -1516,6 +1724,12 @@ els.wrAdd.addEventListener('click', () => {
 renderReplacements();
 updateWordReplacementPanel();
 updateStreamPanel();
+// Translation Stream: restores the saved direction and applies the saved
+// state silently — startup must not emit event frames. When active, the
+// model for the chosen direction is preloaded right away; when off, no
+// model is initialized and nothing is queued (see TRANSLATION.txt).
+els.translationDirection.value = loadTranslationDirection();
+applyTranslationState(false);
 
 // --- Settings dialog -----------------------------------------------------------------
 
