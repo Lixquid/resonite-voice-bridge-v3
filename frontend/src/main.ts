@@ -8,7 +8,7 @@ import {
   type MoonshineModule,
   type TranscriptLine,
 } from './moonshine';
-import { applyStaticTranslations, setLanguage, t } from './i18n';
+import { applyStaticTranslations, getLanguage, setLanguage, t, type Language } from './i18n';
 import './style.css';
 import { needlePrewarm, needleRun, type NeedleCall } from './needle';
 import {
@@ -52,7 +52,7 @@ type TranslationSetting = 'off' | EngineDirection;
  * One of the welcome card's mutually exclusive choices: the three large
  * buttons each apply a settings preset, "all" shows everything.
  */
-type WelcomeChoice = 'transcription' | 'en-jp' | 'jp-en' | 'all';
+type WelcomeChoice = 'transcription' | 'en-ja' | 'ja-en' | 'all';
 
 // --- Constants -------------------------------------------------------------------
 
@@ -87,10 +87,10 @@ const ORIGINAL_STREAM_PREFIX = '[stream.orig]';
 const NORMALIZED_STREAM_PREFIX = '[stream.norm]';
 /**
  * Prefixes marking frames from the Translation Stream: the direction decides
- * which one applies — EN → JP output goes to `[stream.trans.JP]`, JP → EN
+ * which one applies — EN → JA output goes to `[stream.trans.JA]`, JA → EN
  * output to `[stream.trans.EN]`.
  */
-const TRANSLATION_JP_STREAM_PREFIX = '[stream.trans.JP]';
+const TRANSLATION_JA_STREAM_PREFIX = '[stream.trans.JA]';
 const TRANSLATION_EN_STREAM_PREFIX = '[stream.trans.EN]';
 /** Frame prefix marking a natural-language tool call (see needle.ts). */
 const TOOL_SEP_FRAME = '[tool.sep]';
@@ -169,6 +169,10 @@ const NL_CONFIDENCE_KEY = 'nlConfidence';
 const DEFAULT_CONFIDENCE = 0.5;
 /** Persisted key of the last used model size ({@link ArchKey}). */
 const MODEL_KEY = 'modelArch';
+/** Persisted choice for the Target Language setting ('en' or 'ja'). */
+const TARGET_LANGUAGE_KEY = 'targetLanguage';
+/** Default Target Language: English. */
+const DEFAULT_TARGET_LANGUAGE = 'en';
 /** Persisted base URLs for the models not shipped with the app. */
 const MODEL_URL_KEY = 'modelUrls';
 /** Persisted welcome card choice ({@link WelcomeChoice}). */
@@ -337,7 +341,7 @@ function onStreamConfigToggled(): void {
 /** Reads the persisted translation direction, tolerating unknown values. */
 function loadTranslationDirection(): TranslationSetting {
   const saved = readStorage(TRANSLATION_DIRECTION_KEY) as TranslationSetting | null;
-  return saved === 'en-jp' || saved === 'jp-en' || saved === 'off' ? saved : 'off';
+  return saved === 'en-ja' || saved === 'ja-en' || saved === 'off' ? saved : 'off';
 }
 
 /** True when translation is both enabled and pointed at a direction. */
@@ -354,7 +358,7 @@ function translationEngineDirection(): EngineDirection | null {
 function translationStreamPrefix(): string | null {
   const dir = els.translationDirection.value;
   if (!translationActive()) return null;
-  return dir === 'en-jp' ? TRANSLATION_JP_STREAM_PREFIX : TRANSLATION_EN_STREAM_PREFIX;
+  return dir === 'en-ja' ? TRANSLATION_JA_STREAM_PREFIX : TRANSLATION_EN_STREAM_PREFIX;
 }
 
 /** Sets the Translation panel status line (model downloads, errors). */
@@ -409,12 +413,14 @@ function prewarmNeedle(): void {
 }
 
 /**
- * Prewarms the Needle 3 model whenever Natural Language Tool Calling is on
- * and its card is visible (see {@link showEverything}) — including on page
- * load, when the setting was already enabled.
+ * Prewarms the Needle 3 model whenever Natural Language Tool Calling is on —
+ * at page load (the persisted setting) or when the user enables it in
+ * settings — so the first tool call does not pay the download cost. Card
+ * visibility does not matter: the download happens in the background either
+ * way (see the model download groups at the top of the model section).
  */
 function prewarmNlTools(): void {
-  if (els.nlTools.checked && showEverything()) prewarmNeedle();
+  if (els.nlTools.checked) prewarmNeedle();
 }
 
 /** Change handler for the Natural Language Tool Calling toggle. */
@@ -434,7 +440,7 @@ function setNlStatus(text: string): void {
 /** Reads the persisted welcome choice; null when nothing (valid) is saved. */
 function loadWelcomeChoice(): WelcomeChoice | null {
   const saved = readStorage(WELCOME_KEY);
-  return saved === 'transcription' || saved === 'en-jp' || saved === 'jp-en' || saved === 'all'
+  return saved === 'transcription' || saved === 'en-ja' || saved === 'ja-en' || saved === 'all'
     ? saved
     : null;
 }
@@ -503,6 +509,21 @@ function setCheckbox(
  */
 function applyWelcomeChoice(choice: WelcomeChoice, announce: boolean): void {
   if (choice !== 'all') {
+    // Each preset also targets a speech-recognition language: "Just
+    // Transcription" follows the current UI locale, while the translation
+    // presets pin the language the source side of their direction expects.
+    const targetLanguage: Language | null =
+      choice === 'transcription' ? getLanguage() : choice === 'en-ja' ? 'en' : 'ja';
+    if (els.targetLanguage.value !== targetLanguage) {
+      saveTargetLanguage(targetLanguage);
+      els.targetLanguage.value = targetLanguage;
+      applyArchAvailability(targetLanguage);
+      // The speech model is language-specific: drop it so the next start
+      // loads the model for the newly selected target language.
+      mic?.close();
+      mic = null;
+      if (!running) warmStart();
+    }
     setCheckbox(
       els.sendEvents,
       choice !== 'transcription',
@@ -852,6 +873,7 @@ const els = {
   wrPanel: byId<HTMLElement>('wrPanel'),
   wrList: byId<HTMLElement>('wrList'),
   wrAdd: byId<HTMLButtonElement>('wrAdd'),
+  targetLanguage: byId<HTMLSelectElement>('targetLanguage'),
   settings: byId<HTMLButtonElement>('settings'),
   settingsDialog: byId<HTMLDialogElement>('settingsDialog'),
   settingsSave: byId<HTMLButtonElement>('settingsSave'),
@@ -878,19 +900,19 @@ els.settings.hidden = localStorage.getItem('showSuperAdvancedSettings') !== 'tru
 // --- Locale selector -------------------------------------------------------------
 
 /** Locales the selector supports: English and Japanese. */
-type Locale = 'en' | 'jp';
-const LOCALES: readonly Locale[] = ['en', 'jp'];
+type Locale = 'en' | 'ja';
+const LOCALES: readonly Locale[] = ['en', 'ja'];
 /** Flag emoji per locale, shown in the header button. */
 const LOCALE_FLAGS: Record<Locale, string> = {
   en: '🇬🇧',
-  jp: '🇯🇵',
+  ja: '🇯🇵',
 };
 /** The currently active locale. */
 let locale: Locale = (() => {
   const stored = localStorage.getItem('appLocale');
   if (stored && (LOCALES as readonly string[]).includes(stored)) return stored as Locale;
   // Fall back to the document language, then to English.
-  return document.documentElement.lang === 'jp' ? 'jp' : 'en';
+  return document.documentElement.lang === 'ja' ? 'ja' : 'en';
 })();
 
 // Point the i18n helper at the active locale before any t() call renders text.
@@ -1274,9 +1296,42 @@ const ARCHES: Arch[] = [
 /** Default model size when nothing (valid) is persisted. */
 const DEFAULT_ARCH: ArchKey = 'small';
 
-/** Canonical filenames every streaming model needs. */
-const MODEL_FILES = [
-  'frontend.ort',
+/**
+ * Whether a model size can transcribe the given target language: Moonshine
+ * publishes no Japanese medium streaming model, so Medium is English-only.
+ * Asking the English medium CDN paths for the Japanese file set would 404
+ * forever (and even a hit would be the wrong language's weights).
+ */
+function archAvailable(key: ArchKey, language: Language): boolean {
+  return !(key === 'medium' && language === 'ja');
+}
+
+// --- Model download groups ---------------------------------------------------------------------
+//
+// The frontend pulls model assets in exactly five groups (the backend serves
+// every group from its cache — see systray/modelcache.go — pre-downloading
+// the non-Japanese ones on start and fetching the rest on first request):
+//
+//  1. Shared Moonshine files — always: every streaming model needs them
+//     regardless of language (see MODEL_FILES_SHARED).
+//  2. EN model files — when the Target Language is 'en'.
+//  3. JA model files — when the Target Language is 'ja'.
+//  4. Needle 3 files — when Natural Language Tool Calling is on at start or
+//     is enabled in settings (see prewarmNlTools).
+//  5. Translation files — when the Translation Stream is on at start or is
+//     enabled in settings (see applyTranslationState).
+//
+// Groups 1-3 together form one model file set (see {@link modelFileSet}),
+// resolved and handed to the Moonshine binding on every model load; groups
+// 4 and 5 are fetched by their own engines' prewarm paths in needle.ts and
+// translate.ts.
+
+/**
+ * Canonical filenames every streaming model needs, regardless of language.
+ * The language-specific extras live in {@link MODEL_FILES_EN} and
+ * {@link MODEL_FILES_JA}.
+ */
+const MODEL_FILES_SHARED = [
   'encoder.ort',
   'adapter.ort',
   'cross_kv.ort',
@@ -1284,6 +1339,28 @@ const MODEL_FILES = [
   'streaming_config.json',
   'tokenizer.bin',
 ] as const;
+
+/** The English-specific extra: the English graph was exported as a single `frontend.ort`. */
+const MODEL_FILES_EN = ['frontend.ort'] as const;
+
+/**
+ * The Japanese-specific extras: the Japanese graph was exported as a split
+ * model/weights pair (`frontend.model.ort` + `frontend.weights.ort`) rather
+ * than the single `frontend.ort` the English export produced. Only the
+ * Japanese models use them — the English CDN paths have no such files (see
+ * MODEL_FILES_JA in systray/modelcache.go).
+ */
+const MODEL_FILES_JA = ['frontend.model.ort', 'frontend.weights.ort'] as const;
+
+/**
+ * The canonical filenames for the current model-download group: the shared
+ * files, always needed, plus the Target Language's export.
+ */
+function modelFileSet(): readonly string[] {
+  return loadTargetLanguage() === 'ja'
+    ? [...MODEL_FILES_SHARED, ...MODEL_FILES_JA]
+    : [...MODEL_FILES_SHARED, ...MODEL_FILES_EN];
+}
 
 let Moonshine: MoonshineModule;
 let selectedArch: ArchKey = DEFAULT_ARCH;
@@ -1317,7 +1394,24 @@ let partialTranslationTimer: ReturnType<typeof setTimeout> | null = null;
 /** Reads the persisted model size, falling back to the default if unknown. */
 function loadArchPreference(): ArchKey {
   const saved = readStorage(MODEL_KEY) as ArchKey | null;
-  return saved && ARCHES.some((a) => a.key === saved) ? saved : DEFAULT_ARCH;
+  const language = loadTargetLanguage();
+  return saved && ARCHES.some((a) => a.key === saved && archAvailable(a.key, language))
+    ? saved
+    : DEFAULT_ARCH;
+}
+
+/**
+ * Reconciles the model size with a newly selected Target Language: the
+ * persisted selection may not exist in that language (Medium is English-only),
+ * in which case it falls back to the default. Always re-renders the chips so
+ * unavailable sizes disappear (and reappear when switching back).
+ */
+function applyArchAvailability(language: Language): void {
+  if (!archAvailable(selectedArch, language)) {
+    selectedArch = DEFAULT_ARCH;
+    writeStorage(MODEL_KEY, selectedArch);
+  }
+  mountArchChips();
 }
 
 function setStatus(text: string, kind?: 'error' | 'ready' | 'info'): void {
@@ -1404,8 +1498,8 @@ function schedulePartialTranslation(text: string): void {
 
 /**
  * Translates one piece of text (partial or final) and emits the result on
- * the Translation Stream — `[stream.trans.JP]` for EN → JP and
- * `[stream.trans.EN]` for JP → EN. Null results (superseded, dropped, or
+ * the Translation Stream — `[stream.trans.JA]` for EN → JA and
+ * `[stream.trans.EN]` for JA → EN. Null results (superseded, dropped, or
  * failed) are silently ignored; failures were already logged by the engine.
  * Direction changes while a request is in flight are detected here so the
  * old direction's output cannot land on the new one's stream.
@@ -1599,7 +1693,7 @@ function setToggle(
  */
 function parseTranslationDirection(arg: string): TranslationSetting | null {
   const value = arg.toUpperCase();
-  return value === 'EN_JP' ? 'en-jp' : value === 'JP_EN' ? 'jp-en' : value === 'OFF' ? 'off' : null;
+  return value === 'EN_JA' ? 'en-ja' : value === 'JA_EN' ? 'ja-en' : value === 'OFF' ? 'off' : null;
 }
 
 /** Runs one relay command; returns whether it was recognized. */
@@ -1716,14 +1810,30 @@ function runCommand(command: string): boolean {
 }
 
 /**
- * Local and remote base URLs for a model's files: the tiny model ships with
- * the app; the others are first looked for on the same server (`/models/…`,
- * served from the desktop client's cache folder) and then fetched from the
- * URL configured in the settings dialog (which defaults to that same cache
- * path, so an explicit override is only needed for custom hosting).
+ * Local and remote base URLs for a model's files: the tiny English model
+ * ships with the app; the others are first looked for on the same server
+ * (`/models/…`, served from the desktop client's cache folder) and then
+ * fetched from the URL configured in the settings dialog (which defaults to
+ * that same cache path, so an explicit override is only needed for custom
+ * hosting).
  */
 function modelSources(key: ArchKey): { local: string; remote?: string } {
-  if (key === 'tiny') return { local: '/models/tiny_streaming' };
+  const ja = loadTargetLanguage() === 'ja';
+  // The Japanese tiny and small models are not bundled with the app: like the
+  // other streaming models they are served from /models/ (see
+  // systray/modelcache.go) — as lazy groups, the backend downloads them when
+  // the first request for one of their files arrives. Their remote fallback
+  // is the same backend path, so the local-probe retry loop waits out the
+  // backend's download exactly as it does for the other streaming models.
+  // The English tiny model remains bundled and always local.
+  if (key === 'tiny') {
+    return ja
+      ? { local: '/models/tiny_streaming_ja', remote: '/models/tiny_streaming_ja' }
+      : { local: '/models/tiny_streaming' };
+  }
+  if (key === 'small' && ja) {
+    return { local: '/models/small_streaming_ja', remote: '/models/small_streaming_ja' };
+  }
   return { local: `/models/${key}_streaming`, remote: loadModelUrls()[key] };
 }
 
@@ -1749,12 +1859,14 @@ async function probeLocalFile(url: string): Promise<boolean> {
 }
 
 /**
- * Model probing retry budget: the desktop client downloads the models into
- * its cache in the background after startup (see systray/modelcache.go), so
- * a missing file usually means "not downloaded yet" rather than "will never
- * be served". Probing re-runs until every file is found; a round that finds
- * no new file counts against the budget, and any progress resets it — so a
- * slow download is waited out for as long as it is actually moving.
+ * Model probing retry budget: the desktop client serves the models from its
+ * cache folder (see systray/modelcache.go) — the English ones pre-downloaded
+ * on start, the Japanese ones downloaded on demand when the first request
+ * for one of their files arrives. Either way a missing file usually means
+ * "not downloaded yet" rather than "will never be served". Probing re-runs
+ * until every file is found; a round that finds no new file counts against
+ * the budget, and any progress resets it — so a slow download is waited out
+ * for as long as it is actually moving.
  */
 const PROBE_INTERVAL_MS = 2_000;
 const PROBE_MAX_STALLED_ROUNDS = 30; // ~1 minute of probing without any new file
@@ -1768,14 +1880,15 @@ const PROBE_MAX_STALLED_ROUNDS = 30; // ~1 minute of probing without any new fil
  */
 async function resolveModelUrls(key: ArchKey): Promise<Record<string, string>> {
   const { local, remote } = modelSources(key);
-  const localUrls = Object.fromEntries(MODEL_FILES.map((name) => [name, `${local}/${name}`]));
+  const files = modelFileSet();
+  const localUrls = Object.fromEntries(files.map((name) => [name, `${local}/${name}`]));
   if (!remote) return localUrls; // bundled model: all local
 
   // Probe every file on the local path, re-probing the misses until they all
   // show up or the retry budget runs out. The first round runs immediately;
   // every later round waits one interval, so a fully-cached model is served
   // with zero added latency.
-  const missing = new Set<string>(MODEL_FILES);
+  const missing = new Set<string>(files);
   let found = 0;
   let stalls = 0; // consecutive rounds that discovered no new file
   while (missing.size > 0 && stalls <= PROBE_MAX_STALLED_ROUNDS) {
@@ -1784,13 +1897,13 @@ async function resolveModelUrls(key: ArchKey): Promise<Record<string, string>> {
     for (const name of [...missing]) {
       if (await probeLocalFile(`${local}/${name}`)) missing.delete(name);
     }
-    found = MODEL_FILES.length - missing.size;
+    found = files.length - missing.size;
     if (missing.size === 0) break;
     if (found > before) {
       stalls = 0;
-      logEvent(t('log.modelProbeFound', { key, found, total: MODEL_FILES.length }));
+      logEvent(t('log.modelProbeFound', { key, found, total: files.length }));
       setStatus(
-        t('status.waitingForModelFiles', { key, found, total: MODEL_FILES.length }),
+        t('status.waitingForModelFiles', { key, found, total: files.length }),
         'info',
       );
     } else {
@@ -1802,8 +1915,8 @@ async function resolveModelUrls(key: ArchKey): Promise<Record<string, string>> {
   missing.forEach((name) => {
     result[name] = `${remote}/${name}`;
   });
-  const localCount = MODEL_FILES.length - missing.size;
-  if (localCount === MODEL_FILES.length) {
+  const localCount = files.length - missing.size;
+  if (localCount === files.length) {
     logEvent(t('log.modelFromLocal', { key, local }));
   } else if (localCount === 0) {
     logEvent(t('log.modelFromRemote', { key, remote }));
@@ -1812,7 +1925,7 @@ async function resolveModelUrls(key: ArchKey): Promise<Record<string, string>> {
       t('log.modelMixed', {
         key,
         localCount,
-        total: MODEL_FILES.length,
+        total: files.length,
         local,
         remote,
       }),
@@ -1821,8 +1934,37 @@ async function resolveModelUrls(key: ArchKey): Promise<Record<string, string>> {
   return result;
 }
 
-function buildMic(arch: Arch): MicTranscriber {
+/**
+ * Reads the persisted Target Language setting, falling back to English when
+ * the value is missing or not a recognized code.
+ */
+function loadTargetLanguage(): Language {
+  const saved = readStorage(TARGET_LANGUAGE_KEY);
+  return saved === 'ja' ? 'ja' : 'en';
+}
+
+/** Persists the Target Language setting. */
+function saveTargetLanguage(language: Language): void {
+  writeStorage(TARGET_LANGUAGE_KEY, language);
+}
+
+/**
+ * Maps the Target Language to the Moonshine binding's language code. Both use
+ * the ISO 639-1 code, so the mapping is a straight passthrough — kept as a
+ * map so future languages with different binding codes remain easy to add.
+ */
+const MOONSHINE_LANGUAGE_BY_APP_LANGUAGE: Record<Language, string> = {
+  en: 'en',
+  ja: 'ja',
+};
+
+function moonshineLanguageCode(): string {
+  return MOONSHINE_LANGUAGE_BY_APP_LANGUAGE[loadTargetLanguage()] ?? 'en';
+}
+
+function buildMic(arch: Arch, languageCode: string): MicTranscriber {
   return new Moonshine.MicTranscriber()
+    .language(languageCode)
     .modelArch(Moonshine.ModelArch[arch.name])
     .onText(onPartial)
     .onLine(onLine)
@@ -1836,7 +1978,7 @@ async function loadModel(): Promise<void> {
   setStatus(t('status.modelLoading', { key: arch.key }));
   logEvent(t('log.modelLoading', { key: arch.key }));
   setProgress(null);
-  const instance = buildMic(arch);
+  const instance = buildMic(arch, moonshineLanguageCode());
   instance.modelsFrom(await resolveModelUrls(arch.key));
   try {
     await instance.load();
@@ -1994,7 +2136,9 @@ async function selectArch(key: ArchKey): Promise<void> {
 
 function mountArchChips(): void {
   els.archChips.replaceChildren();
+  const language = loadTargetLanguage();
   for (const arch of ARCHES) {
+    if (!archAvailable(arch.key, language)) continue;
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.className = `chip${arch.key === selectedArch ? ' is-active' : ''}`;
@@ -2026,6 +2170,19 @@ els.translationDirection.addEventListener('change', () => {
 });
 els.wordReplacement.addEventListener('change', updateVisibility);
 els.streamConfig.addEventListener('change', onStreamConfigToggled);
+// Target Language: persisted like the other settings; the default (and the
+// value restored on startup) is English. Changing it re-targets the speech
+// model — the same path a model-arch change takes — so the next load uses
+// the newly selected language.
+els.targetLanguage.value = loadTargetLanguage();
+els.targetLanguage.addEventListener('change', () => {
+  const language = els.targetLanguage.value as Language;
+  saveTargetLanguage(language);
+  applyArchAvailability(language);
+  mic?.close();
+  mic = null;
+  if (!running) warmStart();
+});
 // Natural Language Tool Calling: the toggle shows the panel; each field
 // persists as it is edited. The starter tool block is only used when
 // nothing has been saved yet.

@@ -17,7 +17,7 @@
  */
 
 /** The translation directions the models cover. */
-export type TranslationDirection = 'en-jp' | 'jp-en';
+export type TranslationDirection = 'en-ja' | 'ja-en';
 
 /**
  * Base URL of the translation assets on the desktop client. Served layout:
@@ -40,8 +40,8 @@ const TRANSLATION_BASE = `${window.location.origin}/translation`;
  * quality on everyday phrases is markedly worse; both are Apache-2.0.
  */
 const MODEL_IDS: Record<TranslationDirection, string> = {
-  'en-jp': 'opus-tatoeba-en-ja',
-  'jp-en': 'opus-mt-ja-en',
+  'en-ja': 'opus-tatoeba-en-ja',
+  'ja-en': 'opus-mt-ja-en',
 };
 
 /** Generation token cap: live captions are short phrases; bounds worst-case latency. */
@@ -52,7 +52,7 @@ const QUEUE_LIMIT = 10;
 
 /** Human-readable label for a direction, used in status messages. */
 function directionLabel(dir: TranslationDirection): string {
-  return dir === 'en-jp' ? t('translation.label.en-jp') : t('translation.label.jp-en');
+  return dir === 'en-ja' ? t('translation.label.en-ja') : t('translation.label.ja-en');
 }
 
 /**
@@ -67,7 +67,7 @@ function workerSource(): string {
   return `
 const L = ${JSON.stringify(getWorkerLocale().translation)};
 function fmt(s, p) { for (var k in p) { s = s.split("{" + k + "}").join(p[k]); } return s; }
-const DIRECTIONS = { 'en-jp': 'opus-tatoeba-en-ja', 'jp-en': 'opus-mt-ja-en' };
+const DIRECTIONS = { 'en-ja': 'opus-tatoeba-en-ja', 'ja-en': 'opus-mt-ja-en' };
 let lib = null;
 const pipes = new Map();
 const loads = new Map();
@@ -351,7 +351,7 @@ function ensureWorker(): void {
       const now = Date.now();
       if (now - lastDownloadStatus < DOWNLOAD_STATUS_INTERVAL_MS) return;
       lastDownloadStatus = now;
-      const dir = m.dir === 'jp-en' ? 'jp-en' : 'en-jp';
+      const dir = m.dir === 'ja-en' ? 'ja-en' : 'en-ja';
       const label = directionLabel(dir);
       if (typeof m.total === 'number' && m.total > 0 && typeof m.loaded === 'number') {
         onProgress?.(

@@ -2,18 +2,20 @@ package main
 
 // Warm model cache: downloads the models that are too large to ship with the
 // app into a per-user cache folder and serves them to the frontend over HTTP,
-// so the frontend never has to reach an external service itself:
+// so the frontend never has to reach an external service itself. The groups
+// (see cacheGroups) split into two flavors:
 //
-//   - The small and medium Moonshine streaming speech models, from the pinned
-//     Moonshine CDN revision, served under /models/<name>/<file>.
-//   - The Needle 3 engine (JS + WASM) and model blob, from the pinned
-//     Hugging Face revision, served under /needle3/<file> — the same layout
-//     the engine expects from its base URL.
-//   - The browser-side translation engine (Transformers.js and one OPUS-MT
-//     model per direction), from pinned revisions, served under
-//     /translation/<file>. Unlike the groups above these download lazily,
-//     when the frontend first requests them, because translation is off by
-//     default (see serveTranslationFile).
+//   - Eager, non-Japanese: the small and medium English Moonshine streaming
+//     speech models (under /models/<name>/<file>) and the Needle 3 engine
+//     (JS + WASM + model blob, under /needle3/<file>). These pre-download on
+//     start (see warmModelCache), so they are already cached when the
+//     frontend asks for them.
+//   - Lazy: the Japanese Moonshine streaming models (small and tiny, served
+//     under /models/<name>_ja/<file>) and the browser-side translation
+//     engine (Transformers.js and one OPUS-MT model per direction, served
+//     under /translation/<file>). These download on demand — when the
+//     frontend first requests one of their files (see serveModelCache) — so
+//     an unused feature never costs bandwidth.
 //
 // Every file is downloaded once and kept in the cache folder; subsequent
 // starts only fetch what is missing. The cache directory follows the same
@@ -34,28 +36,39 @@ import (
 	"time"
 )
 
-// The pinned Moonshine CDN revision the small and medium models come from.
-// Bump deliberately, mirroring frontend/scripts/fetch-models.mjs.
-const moonshineCDNBase = "https://download.moonshine.ai/model"
-const moonshineCDNRev = "quantized_26_07_30"
+// The pinned Moonshine CDN revision the English streaming models come from.
+// Bump deliberately, mirroring frontend/scripts/fetch-models.mjs. Vars rather
+// than constants so tests can retarget them at a local server.
+var (
+	moonshineCDNBase = "https://download.moonshine.ai/model"
+	moonshineCDNRev  = "quantized_26_07_30"
+)
+
+// The pinned Moonshine CDN revision the Japanese streaming models come from.
+// Per-language on purpose: Moonshine quantizes each language from its own
+// checkpoints on its own day (see kJapaneseStreamingQuantizedDir in the
+// Moonshine core catalog), so the revision must never be coupled to the
+// English one above. Bump deliberately.
+var moonshineCDNJaRev = "quantized_26_08_23"
 
 // The pinned Hugging Face revision of the Needle 3 engine. Must match the
 // revision the frontend was built against (see frontend/src/needle.ts).
-const needle3Base = "https://huggingface.co/Cactus-Compute/needle3/resolve/c7c415a3d1b3d929014bc6e866d51ebb971f7089"
+// Var rather than constant so tests can retarget it at a local server.
+var needle3Base = "https://huggingface.co/Cactus-Compute/needle3/resolve/c7c415a3d1b3d929014bc6e866d51ebb971f7089"
 
 // The pinned sources of the browser-side translation engine (the Translation
 // Stream, see frontend/src/translate.ts): the Transformers.js library build,
 // and one OPUS-MT model per direction. Must match the revisions the frontend
-// was built against. Unlike the groups above, these are NOT downloaded at
-// startup — translation is off by default, so every translation asset is
-// fetched lazily the first time the frontend requests it (see
-// serveTranslationFile). Vars rather than constants so tests can retarget
-// them at a local server.
+// was built against. These download lazily, when the frontend first requests
+// them — translation is off by default (see cacheGroups). Vars rather than
+// constants so tests can retarget them at a local server.
 const transformersJSVersion = "3.8.1"
+
 // EN → JP: an ONNX export of Helsinki-NLP/opus-tatoeba-en-ja. Preferred over
 // the bible-domain Xenova/opus-mt-en-jap, whose output on everyday phrases is
 // markedly worse; both are Apache-2.0.
 const translationEnJapRev = "225fd3c2970d899c05b4ddde2fdeda2ffdc8a69e"
+
 // JP → EN: the standard OPUS-MT ja-en (Apache-2.0 via Helsinki-NLP).
 const translationJaEnRev = "1a906cfaaf7c8f4193f67f5885c082aa6dbd9d16"
 
@@ -65,16 +78,41 @@ var (
 	translationJaEnBase  = "https://huggingface.co/Xenova/opus-mt-ja-en/resolve/" + translationJaEnRev
 )
 
-// modelFiles lists the canonical filenames every streaming Moonshine model
-// needs (same list as MODEL_FILES in frontend/src/main.ts).
-var modelFiles = []string{
-	"frontend.ort",
+// modelFilesShared lists the canonical filenames every streaming Moonshine
+// model needs, regardless of language (the same shared list as
+// MODEL_FILES_SHARED in frontend/src/main.ts).
+var modelFilesShared = []string{
 	"encoder.ort",
 	"adapter.ort",
 	"cross_kv.ort",
 	"decoder_kv.ort",
 	"streaming_config.json",
 	"tokenizer.bin",
+}
+
+// modelFileEn is the English-specific extra: the English graph was exported
+// as a single frontend.ort.
+var modelFileEn = []string{"frontend.ort"}
+
+// modelFilesJa are the Japanese-specific extras: the Japanese graph was
+// exported as a split model/weights pair (frontend.model.ort +
+// frontend.weights.ort) rather than the single frontend.ort the English
+// export produced, so the Japanese file set is one file larger (see
+// MODEL_FILES_JA in frontend/src/main.ts). Only the Japanese models use
+// them — the English CDN paths have no such files.
+var modelFilesJa = []string{
+	"frontend.model.ort",
+	"frontend.weights.ort",
+}
+
+// modelFilesEn is the full English file set: the shared files plus the
+// English export (same list as MODEL_FILES_EN in frontend/src/main.ts).
+var modelFilesEn = append(append([]string{}, modelFilesShared...), modelFileEn...)
+
+// jaModelFiles composes the full Japanese file set: the shared files plus
+// the split model/weights pair.
+func jaModelFiles() []string {
+	return append(append([]string{}, modelFilesShared...), modelFilesJa...)
 }
 
 // needle3Files are the files the frontend's Needle 3 worker fetches from its
@@ -122,112 +160,117 @@ var cachePrefixes = []struct{ url, dir string }{
 	{translationURLPrefix, "translation"},
 }
 
-// Cache-download groups: a cache-relative directory, the base URL its files
-// are fetched from, and the files within it. The cache layout mirrors the
-// served URL layout (models/… under /models/, needle3/… under /needle3/).
-// The translation assets are deliberately absent: translation is off by
-// default and must not download anything until the frontend asks for it.
-func cacheGroups() []struct {
+// A cache-download group: a cache-relative directory, the pinned remote base
+// URL its files are fetched from, the files within it, and whether the group
+// is eager. The cache layout mirrors the served URL layout (models/… under
+// /models/, needle3/… under /needle3/, translation/… under /translation/).
+//
+// Eager groups hold every non-Japanese asset: they pre-download on start
+// (see warmModelCache), so the files are already cached when the frontend
+// asks for them. Lazy groups — the Japanese streaming models and the
+// translation engine — download on demand, the first time the frontend
+// requests one of their files: Japanese is a secondary target language and
+// translation is off by default, so neither should cost bandwidth when
+// unused. Eager groups also download on demand if a startup download
+// failed, so a transient network error cannot leave a file permanently
+// missing.
+type cacheGroup struct {
 	dir   string
 	base  string
 	files []string
-} {
-	return []struct {
-		dir   string
-		base  string
-		files []string
-	}{
+	eager bool
+}
+
+// cacheGroups lists every downloadable group. Bases are read on every call:
+// tests retarget them at a local server (see the vars above).
+func cacheGroups() []cacheGroup {
+	return []cacheGroup{
+		// Eager, non-Japanese: pre-downloaded on start.
 		{
 			dir:   filepath.Join("models", "small_streaming"),
 			base:  moonshineCDNBase + "/small-streaming-en/" + moonshineCDNRev,
-			files: modelFiles,
+			files: modelFilesEn,
+			eager: true,
 		},
 		{
 			dir:   filepath.Join("models", "medium_streaming"),
 			base:  moonshineCDNBase + "/medium-streaming-en/" + moonshineCDNRev,
-			files: modelFiles,
+			files: modelFilesEn,
+			eager: true,
 		},
 		{
 			dir:   "needle3",
 			base:  needle3Base,
 			files: needle3Files,
+			eager: true,
+		},
+		// Lazy, Japanese: downloaded when the frontend requests them.
+		{
+			dir:   filepath.Join("models", "small_streaming_ja"),
+			base:  moonshineCDNBase + "/small-streaming-ja/" + moonshineCDNJaRev,
+			files: jaModelFiles(),
+		},
+		{
+			dir:   filepath.Join("models", "tiny_streaming_ja"),
+			base:  moonshineCDNBase + "/tiny-streaming-ja/" + moonshineCDNJaRev,
+			files: jaModelFiles(),
+		},
+		// Lazy, translation engine: downloaded when the frontend requests
+		// them (translation is off by default).
+		{
+			dir:   filepath.Join("translation", "lib"),
+			base:  transformersJSBase,
+			files: translationLibFiles,
+		},
+		{
+			dir:   filepath.Join("translation", "models", "opus-tatoeba-en-ja"),
+			base:  translationEnJapBase,
+			files: translationModelFiles,
+		},
+		{
+			dir:   filepath.Join("translation", "models", "opus-mt-ja-en"),
+			base:  translationJaEnBase,
+			files: translationModelFiles,
 		},
 	}
 }
 
-// translationFileURL maps every approved translation asset (cache-relative
-// slash path) to the pinned remote URL it comes from. Requests for anything
-// else under /translation/ are refused: asset serving is restricted to the
-// approved model files (see serveTranslationFile).
-func translationFileURLs() map[string]string {
-	urls := make(map[string]string, len(translationLibFiles)+2*len(translationModelFiles))
-	for _, name := range translationLibFiles {
-		urls["translation/lib/"+name] = transformersJSBase + "/" + name
-	}
-	for _, model := range []struct{ id, base string }{
-		{"opus-tatoeba-en-ja", translationEnJapBase},
-		{"opus-mt-ja-en", translationJaEnBase},
-	} {
-		for _, name := range translationModelFiles {
-			urls["translation/models/"+model.id+"/"+name] = model.base + "/" + name
+// groupFileURL looks up one cache-relative slash path among the groups' file
+// sets and returns the pinned remote URL it comes from. Only approved files
+// are ever served or downloaded; anything else (ok == false) is refused — a
+// request must not be able to make the server fetch arbitrary URLs.
+func groupFileURL(rel string) (url string, ok bool) {
+	for _, group := range cacheGroups() {
+		if !strings.HasPrefix(rel, group.dir+"/") {
+			continue
+		}
+		name := strings.TrimPrefix(rel, group.dir+"/")
+		for _, file := range group.files {
+			if file == name {
+				return group.base + "/" + name, true
+			}
 		}
 	}
-	return urls
+	return "", false
 }
 
-// Per-file locks so concurrent requests for the same lazy asset download it
-// once instead of racing (guarded by translationLocksMu).
+// Per-file locks so concurrent requests for the same missing asset download
+// it once instead of racing (guarded by fileLocksMu).
 var (
-	translationLocksMu sync.Mutex
-	translationLocks   = map[string]*sync.Mutex{}
+	fileLocksMu sync.Mutex
+	fileLocks   = map[string]*sync.Mutex{}
 )
 
-// translationLock returns the download lock for one cache-relative path.
-func translationLock(rel string) *sync.Mutex {
-	translationLocksMu.Lock()
-	defer translationLocksMu.Unlock()
-	mu, ok := translationLocks[rel]
+// fileLock returns the download lock for one cache-relative path.
+func fileLock(rel string) *sync.Mutex {
+	fileLocksMu.Lock()
+	defer fileLocksMu.Unlock()
+	mu, ok := fileLocks[rel]
 	if !ok {
 		mu = &sync.Mutex{}
-		translationLocks[rel] = mu
+		fileLocks[rel] = mu
 	}
 	return mu
-}
-
-// serveTranslationFile serves one file of the translation engine from the
-// cache, downloading it first when needed — translation assets are fetched
-// lazily so an unused feature never costs bandwidth. Only approved files
-// (see translationFileURLs) are ever served or downloaded; anything else 404s
-// without touching the network. A failed download answers 502 so the frontend
-// can report it instead of mistaking it for a missing file.
-func serveTranslationFile(w http.ResponseWriter, r *http.Request, rel string) {
-	url, ok := translationFileURLs()[rel]
-	if !ok {
-		http.NotFound(w, r)
-		return
-	}
-	full := filepath.Join(cacheDir(), filepath.FromSlash(rel))
-	if serveIfCached(w, r, full) {
-		return
-	}
-	mu := translationLock(rel)
-	mu.Lock()
-	defer mu.Unlock()
-	if serveIfCached(w, r, full) {
-		return // downloaded by a concurrent request while we waited
-	}
-	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-		log.Printf("Model cache: %s: cannot create directory: %v", rel, err)
-		http.Error(w, "cache directory unavailable", http.StatusInternalServerError)
-		return
-	}
-	log.Printf("Model cache: %s: not cached — downloading on demand", rel)
-	if err := downloadFile(url, full); err != nil {
-		log.Printf("Model cache: %s: FAILED: %v", rel, err)
-		http.Error(w, "download failed", http.StatusBadGateway)
-		return
-	}
-	http.ServeFile(w, r, full)
 }
 
 // serveIfCached serves full when it exists as a file, reporting whether it did.
@@ -298,14 +341,19 @@ func clearCache() {
 	log.Printf("Model cache cleared: %s", cacheDir())
 }
 
-// warmModelCache downloads every missing cache file, one group per goroutine
-// (models within a group sequentially, groups in parallel). Failures are
-// logged and retried on the next start; serving continues with whatever is
-// already cached.
+// warmModelCache downloads every missing file of every eager group — all the
+// non-Japanese assets — one group per goroutine (models within a group
+// sequentially, groups in parallel). The lazy groups (the Japanese models
+// and the translation engine) are not touched here: they download on demand
+// when the frontend requests them. Failures are logged and retried on the
+// next start — or on demand, when the frontend asks for the file; serving
+// continues with whatever is already cached.
 func warmModelCache() {
-	groups := cacheGroups()
 	var wg sync.WaitGroup
-	for _, group := range groups {
+	for _, group := range cacheGroups() {
+		if !group.eager {
+			continue
+		}
 		wg.Add(1)
 		go func(dir, base string, files []string) {
 			defer wg.Done()
@@ -413,11 +461,15 @@ func humanSize(n int64) string {
 }
 
 // serveModelCache serves /models/…, /needle3/… and /translation/… from the
-// cache directory, returning false for paths outside those prefixes. Requests
-// inside the prefixes are always handled here — with a plain 404 for missing
-// files — so the frontend's model probing never mistakes the SPA fallback
-// (index.html) for a model file. Translation assets additionally download on
-// demand (see serveTranslationFile).
+// cache directory, downloading on demand when a requested file is not yet
+// cached (the Japanese models and the translation engine are lazy groups —
+// see cacheGroups — and eager groups re-download here when a startup
+// download failed). It returns false for paths outside those prefixes.
+// Requests inside the prefixes are always handled here — with a plain 404
+// for anything that is not an approved group file — so the frontend's model
+// probing never mistakes the SPA fallback (index.html) for a model file, and
+// unapproved paths never trigger a download. A failed download answers 502
+// so the frontend can report it instead of mistaking it for a missing file.
 func serveModelCache(w http.ResponseWriter, r *http.Request) bool {
 	rel, ok := cacheRelPath(r.URL.Path)
 	if !ok {
@@ -427,15 +479,35 @@ func serveModelCache(w http.ResponseWriter, r *http.Request) bool {
 		http.NotFound(w, r)
 		return true
 	}
-	if strings.HasPrefix(rel, "translation/") {
-		serveTranslationFile(w, r, rel)
+	url, ok := groupFileURL(rel)
+	if !ok {
+		http.NotFound(w, r)
 		return true
 	}
 	full := filepath.Join(cacheDir(), filepath.FromSlash(rel))
 	if serveIfCached(w, r, full) {
 		return true
 	}
-	http.NotFound(w, r)
+	// Not cached yet: download once, guarded by a per-file lock so
+	// concurrent requests for the same file share one download.
+	mu := fileLock(rel)
+	mu.Lock()
+	defer mu.Unlock()
+	if serveIfCached(w, r, full) {
+		return true // downloaded by a concurrent request while we waited
+	}
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		log.Printf("Model cache: %s: cannot create directory: %v", rel, err)
+		http.Error(w, "cache directory unavailable", http.StatusInternalServerError)
+		return true
+	}
+	log.Printf("Model cache: %s: not cached — downloading on demand", rel)
+	if err := downloadFile(url, full); err != nil {
+		log.Printf("Model cache: %s: FAILED: %v", rel, err)
+		http.Error(w, "download failed", http.StatusBadGateway)
+		return true
+	}
+	http.ServeFile(w, r, full)
 	return true
 }
 

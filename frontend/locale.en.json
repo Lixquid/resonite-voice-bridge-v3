@@ -27,7 +27,7 @@
         "modelLoadFailed": "Model load failed: {message}",
         "bindingLoadFailed": "Binding: failed to load from {url} — {message}",
         "unknownCommand": "Unknown command: {command}",
-        "invalidTranslationDirection": "Translation: unknown direction \"{arg}\" (use EN_JP, JP_EN, or OFF).",
+        "invalidTranslationDirection": "Translation: unknown direction \"{arg}\" (use EN_JA, JA_EN, or OFF).",
         "missingElement": "Missing #{id} — index.html and main.ts are out of sync."
     },
     "log": {
@@ -90,8 +90,8 @@
     },
     "translation": {
         "label": {
-            "en-jp": "EN → JP",
-            "jp-en": "JP → EN"
+            "en-ja": "EN → JA",
+            "ja-en": "JA → EN"
         },
         "status": {
             "preparing": "Translation: preparing the {label} model…",
@@ -145,6 +145,11 @@
         },
         "settings": {
             "voiceRecognitionModel": "Voice Recognition Model:",
+            "targetLanguage": {
+                "label": "Target Language",
+                "en": "English (EN)",
+                "ja": "Japanese (JA)"
+            },
             "advancedSettings": "Advanced Settings",
             "sendEvents": {
                 "label": "Send Events",
@@ -182,8 +187,8 @@
                 "buttons": {
                     "groupAria": "Welcome options",
                     "transcription": "Just Transcription",
-                    "enJp": "<span class=\"welcome-flag\">🇬🇧</span> → <span class=\"welcome-flag\">🇯🇵</span>",
-                    "jpEn": "<span class=\"welcome-flag\">🇯🇵</span> → <span class=\"welcome-flag\">🇬🇧</span>",
+                    "enJa": "<span class=\"welcome-flag\">🇬🇧</span> → <span class=\"welcome-flag\">🇯🇵</span>",
+                    "jaEn": "<span class=\"welcome-flag\">🇯🇵</span> → <span class=\"welcome-flag\">🇬🇧</span>",
                     "showEverything": "Show me everything"
                 }
             },
@@ -191,7 +196,7 @@
                 "description": "Every occurrence of a target word in the voice text is replaced with its replacement before sending. Matching ignores case; the replacement follows the case of the matched word."
             },
             "streamConfiguration": {
-                "description": "Each enabled stream sends its own copy of the recognized text. The <strong>Default Stream</strong> is sent as-is and respects \"Remove Punctuation\". The <strong>Original Stream</strong> sends the text straight from the model with <code>[stream.orig]</code> in front, ignoring \"Remove Punctuation\". The <strong>Normalized Stream</strong> sends the text with punctuation removed (always, regardless of the setting) with <code>[stream.norm]</code> in front. The <strong>Translation Stream</strong> sends a machine translation of the text with <code>[stream.trans.JP]</code> or <code>[stream.trans.EN]</code> in front, depending on the direction chosen in the Translation panel below.",
+                "description": "Each enabled stream sends its own copy of the recognized text. The <strong>Default Stream</strong> is sent as-is and respects \"Remove Punctuation\". The <strong>Original Stream</strong> sends the text straight from the model with <code>[stream.orig]</code> in front, ignoring \"Remove Punctuation\". The <strong>Normalized Stream</strong> sends the text with punctuation removed (always, regardless of the setting) with <code>[stream.norm]</code> in front. The <strong>Translation Stream</strong> sends a machine translation of the text with <code>[stream.trans.JA]</code> or <code>[stream.trans.EN]</code> in front, depending on the direction chosen in the Translation panel below.",
                 "defaultStream": {
                     "label": "Default Stream",
                     "description": "The stream with no prefix — what is emitted by default."
@@ -206,17 +211,17 @@
                 },
                 "translationStream": {
                     "label": "Translation Stream",
-                    "description": "A machine translation of the text, prefixed with <code>[stream.trans.JP]</code> (EN → JP) or <code>[stream.trans.EN]</code> (JP → EN). Configure it in the panel below."
+                    "description": "A machine translation of the text, prefixed with <code>[stream.trans.JA]</code> (EN → JA) or <code>[stream.trans.EN]</code> (JA → EN). Configure it in the panel below."
                 }
             },
             "translation": {
                 "description": "The Translation Stream translates the recognized text locally in the browser with OPUS-MT models (run by Transformers.js in a worker). The models are downloaded by the desktop client into its cache folder and served from there — nothing is fetched from the internet during translation, and nothing runs while the direction below is set to Disabled.",
                 "direction": "Translation Direction",
-                "directionDescription": "EN → JP output goes out as <code>[stream.trans.JP]</code>; JP → EN output as <code>[stream.trans.EN]</code>. The model for the chosen direction is loaded on first use.",
+                "directionDescription": "EN → JA output goes out as <code>[stream.trans.JA]</code>; JA → EN output as <code>[stream.trans.EN]</code>. The model for the chosen direction is loaded on first use.",
                 "directionOptions": {
                     "off": "Disabled",
-                    "enJp": "English → Japanese",
-                    "jpEn": "Japanese → English"
+                    "enJa": "English → Japanese",
+                    "jaEn": "Japanese → English"
                 }
             },
             "naturalLanguageTools": {
@@ -288,7 +293,7 @@
                     "translationToggle": "Toggles the Translation Stream on and off.",
                     "translationEnable": "Enables the Translation Stream.",
                     "translationDisable": "Disables the Translation Stream.",
-                    "translationDirection": "Sets the translation direction (EN → JP, JP → EN, or disabled)."
+                    "translationDirection": "Sets the translation direction (EN → JA, JA → EN, or disabled)."
                 }
             }
         }

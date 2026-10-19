@@ -1,14 +1,14 @@
 /**
  * Minimal i18n helper: reads the application strings from `locale.en.json`
- * and `locale.jp.json` and substitutes `{name}` placeholders. The JSON files
+ * and `locale.ja.json` and substitutes `{name}` placeholders. The JSON files
  * are imported directly, so Vite bundles them with the app — no runtime fetch
  * is needed.
  */
 import localeEn from '../locale.en.json';
-import localeJp from '../locale.jp.json';
+import localeJa from '../locale.ja.json';
 
 /** Languages the app supports. */
-export type Language = 'en' | 'jp';
+export type Language = 'en' | 'ja';
 
 /** Flattens a nested locale object into dot-separated `a.b.c` keys. */
 function flatten(
@@ -30,7 +30,7 @@ function flatten(
 /** One flattened string table per supported language. */
 const TABLES: Record<Language, Record<string, string>> = {
   en: flatten(localeEn as unknown as Record<string, unknown>),
-  jp: flatten(localeJp as unknown as Record<string, unknown>),
+  ja: flatten(localeJa as unknown as Record<string, unknown>),
 };
 
 /** The currently active language. English until setLanguage() says otherwise. */

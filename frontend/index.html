@@ -25,8 +25,8 @@
                 <span class="locale-flag locale-flag--en" aria-hidden="true">🇬🇧</span>
                 <span class="locale-name">EN</span>
               </button>
-              <button class="locale-item" type="button" data-locale="jp" role="option" aria-selected="false">
-                <span class="locale-flag locale-flag--jp" aria-hidden="true">🇯🇵</span>
+              <button class="locale-item" type="button" data-locale="ja" role="option" aria-selected="false">
+                <span class="locale-flag locale-flag--ja" aria-hidden="true">🇯🇵</span>
                 <span class="locale-name">JP</span>
               </button>
             </div>
@@ -39,8 +39,8 @@
         <p class="panel-hint" data-i18n="ui.cards.welcome.description">Welcome to Resonite Voice Bridge! What would you like to do?</p>
         <div class="welcome-buttons" id="welcomeButtons" role="group" data-i18n-aria="ui.cards.welcome.buttons.groupAria">
           <button type="button" class="btn welcome-btn" data-welcome="transcription" aria-pressed="false" data-i18n="ui.cards.welcome.buttons.transcription">Just Transcription</button>
-          <button type="button" class="btn welcome-btn" data-welcome="en-jp" aria-pressed="false" data-i18n-html="ui.cards.welcome.buttons.enJp">🇬🇧 → 🇯🇵</button>
-          <button type="button" class="btn welcome-btn" data-welcome="jp-en" aria-pressed="false" data-i18n-html="ui.cards.welcome.buttons.jpEn">🇯🇵 → 🇬🇧</button>
+          <button type="button" class="btn welcome-btn" data-welcome="en-ja" aria-pressed="false" data-i18n-html="ui.cards.welcome.buttons.enJa">🇬🇧 → 🇯🇵</button>
+          <button type="button" class="btn welcome-btn" data-welcome="ja-en" aria-pressed="false" data-i18n-html="ui.cards.welcome.buttons.jaEn">🇯🇵 → 🇬🇧</button>
         </div>
         <button type="button" class="btn welcome-btn welcome-btn--all" id="welcomeAll" data-welcome="all" aria-pressed="false" data-i18n="ui.cards.welcome.buttons.showEverything">Show me everything</button>
       </section>
@@ -116,6 +116,11 @@
       <section id="settingsPanel">
         <h2 data-i18n="ui.section.settings">Settings</h2>
         <div class="label" data-i18n="ui.settings.voiceRecognitionModel">Voice Recognition Model:</div>
+        <label for="targetLanguage" data-i18n="ui.settings.targetLanguage.label">Target Language</label>
+        <select id="targetLanguage">
+          <option value="en" data-i18n="ui.settings.targetLanguage.en">English (EN)</option>
+          <option value="ja" data-i18n="ui.settings.targetLanguage.ja">Japanese (JA)</option>
+        </select>
         <div class="chips" id="archChips" role="group" aria-label="Model size"></div>
         <label class="opt opt--first">
           <input type="checkbox" id="sendEvents" checked />
@@ -185,7 +190,7 @@
           ignoring &quot;Remove Punctuation&quot;. The <strong>Normalized Stream</strong> sends
           the text with punctuation removed (always, regardless of the setting)
           with <code>[stream.norm]</code> in front. The <strong>Translation Stream</strong> sends
-          a machine translation of the text with <code>[stream.trans.JP]</code> or
+          a machine translation of the text with <code>[stream.trans.JA]</code> or
           <code>[stream.trans.EN]</code> in front, depending on the direction chosen in the
           Translation panel below.
         </p>
@@ -210,7 +215,7 @@
         <label class="opt opt--sub">
           <input type="checkbox" id="streamTranslation" />
           <span><span data-i18n="ui.cards.streamConfiguration.translationStream.label">Translation Stream</span>
-            <small class="opt-sub" data-i18n-html="ui.cards.streamConfiguration.translationStream.description">A machine translation of the text, prefixed with <code>[stream.trans.JP]</code> (EN → JP) or <code>[stream.trans.EN]</code> (JP → EN). Configure it in the panel below.</small>
+            <small class="opt-sub" data-i18n-html="ui.cards.streamConfiguration.translationStream.description">A machine translation of the text, prefixed with <code>[stream.trans.JA]</code> (EN → JA) or <code>[stream.trans.EN]</code> (JA → EN). Configure it in the panel below.</small>
           </span>
         </label>
       </section>
@@ -229,10 +234,10 @@
           <label for="translationDirection" data-i18n="ui.cards.translation.direction">Translation Direction</label>
           <select id="translationDirection">
             <option value="off" data-i18n="ui.cards.translation.directionOptions.off">Disabled</option>
-            <option value="en-jp" data-i18n="ui.cards.translation.directionOptions.enJp">English → Japanese</option>
-            <option value="jp-en" data-i18n="ui.cards.translation.directionOptions.jpEn">Japanese → English</option>
+            <option value="en-ja" data-i18n="ui.cards.translation.directionOptions.enJa">English → Japanese</option>
+            <option value="ja-en" data-i18n="ui.cards.translation.directionOptions.jaEn">Japanese → English</option>
           </select>
-          <small class="nl-sub" data-i18n-html="ui.cards.translation.directionDescription">EN → JP output goes out as <code>[stream.trans.JP]</code>; JP → EN output as <code>[stream.trans.EN]</code>. The model for the chosen direction is loaded on first use.</small>
+          <small class="nl-sub" data-i18n-html="ui.cards.translation.directionDescription">EN → JA output goes out as <code>[stream.trans.JA]</code>; JA → EN output as <code>[stream.trans.EN]</code>. The model for the chosen direction is loaded on first use.</small>
         </div>
         <p class="nl-status" id="translationStatus"></p>
       </section>
@@ -316,7 +321,7 @@
             <li><button type="button" class="doc-event-btn" data-event="translationToggle">translationToggle</button> - <span data-i18n="ui.doc.commands.items.translationToggle">Toggles the Translation Stream on and off.</span></li>
             <li><button type="button" class="doc-event-btn" data-event="translationEnable">translationEnable</button> - <span data-i18n="ui.doc.commands.items.translationEnable">Enables the Translation Stream.</span></li>
             <li><button type="button" class="doc-event-btn" data-event="translationDisable">translationDisable</button> - <span data-i18n="ui.doc.commands.items.translationDisable">Disables the Translation Stream.</span></li>
-            <li><button type="button" class="doc-event-btn" data-event="translationDirection=EN_JP|JP_EN|OFF">translationDirection=EN_JP|JP_EN|OFF</button> - <span data-i18n="ui.doc.commands.items.translationDirection">Sets the translation direction (EN → JP, JP → EN, or disabled).</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="translationDirection=EN_JA|JA_EN|OFF">translationDirection=EN_JA|JA_EN|OFF</button> - <span data-i18n="ui.doc.commands.items.translationDirection">Sets the translation direction (EN → JA, JA → EN, or disabled).</span></li>
           </ul>
         </details>
       </section>

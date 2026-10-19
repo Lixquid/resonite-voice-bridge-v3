@@ -27,7 +27,7 @@
         "modelLoadFailed": "モデルの読み込みに失敗しました: {message}",
         "bindingLoadFailed": "バインディング: {url} からの読み込みに失敗しました — {message}",
         "unknownCommand": "不明なコマンド: {command}",
-        "invalidTranslationDirection": "翻訳: 不明な翻訳方向 \"{arg}\"（EN_JP、JP_EN、または OFF を指定してください）。",
+        "invalidTranslationDirection": "翻訳: 不明な翻訳方向 \"{arg}\"（EN_JA、JA_EN、または OFF を指定してください）。",
         "missingElement": "#{id} が見つかりません — index.html と main.ts の内容が一致していません。"
     },
     "log": {
@@ -96,8 +96,8 @@
     },
     "translation": {
         "label": {
-            "en-jp": "英語 → 日本語",
-            "jp-en": "日本語 → 英語"
+            "en-ja": "英語 → 日本語",
+            "ja-en": "日本語 → 英語"
         },
         "status": {
             "preparing": "翻訳: {label} モデルを準備中…",
@@ -151,6 +151,11 @@
         },
         "settings": {
             "voiceRecognitionModel": "音声認識モデル：",
+            "targetLanguage": {
+                "label": "ターゲット言語",
+                "en": "英語 (EN)",
+                "ja": "日本語 (JA)"
+            },
             "advancedSettings": "詳細設定",
             "sendEvents": {
                 "label": "イベントを送信",
@@ -188,8 +193,8 @@
                 "buttons": {
                     "groupAria": "ようこそ画面の選択肢",
                     "transcription": "文字起こしのみ",
-                    "enJp": "<span class=\"welcome-flag\">🇬🇧</span> → <span class=\"welcome-flag\">🇯🇵</span>",
-                    "jpEn": "<span class=\"welcome-flag\">🇯🇵</span> → <span class=\"welcome-flag\">🇬🇧</span>",
+                    "enJa": "<span class=\"welcome-flag\">🇬🇧</span> → <span class=\"welcome-flag\">🇯🇵</span>",
+                    "jaEn": "<span class=\"welcome-flag\">🇯🇵</span> → <span class=\"welcome-flag\">🇬🇧</span>",
                     "showEverything": "すべて表示"
                 }
             },
@@ -197,7 +202,7 @@
                 "description": "音声テキスト内で対象の単語が出現するたびに、送信前に指定した置換語に置き換えます。大文字と小文字は区別せずに照合し、置換後の単語は一致した単語の大文字・小文字の形式に合わせます。"
             },
             "streamConfiguration": {
-                "description": "有効になっている各ストリームは、認識されたテキストのコピーをそれぞれ送信します。<strong>デフォルトストリーム</strong>はそのまま送信され、「句読点を削除」の設定に従います。<strong>オリジナルストリーム</strong>は、モデルからのテキストをそのまま送信し、先頭に<code>[stream.orig]</code>を付加します。「句読点を削除」の設定は無視されます。<strong>正規化ストリーム</strong>は、句読点を削除したテキストを送信します（設定にかかわらず常に削除されます）。先頭には<code>[stream.norm]</code>を付加します。<strong>翻訳ストリーム</strong>は、下の翻訳パネルで選択した方向に応じて、テキストの機械翻訳を送信し、先頭に<code>[stream.trans.JP]</code>または<code>[stream.trans.EN]</code>を付加します。",
+                "description": "有効になっている各ストリームは、認識されたテキストのコピーをそれぞれ送信します。<strong>デフォルトストリーム</strong>はそのまま送信され、「句読点を削除」の設定に従います。<strong>オリジナルストリーム</strong>は、モデルからのテキストをそのまま送信し、先頭に<code>[stream.orig]</code>を付加します。「句読点を削除」の設定は無視されます。<strong>正規化ストリーム</strong>は、句読点を削除したテキストを送信します（設定にかかわらず常に削除されます）。先頭には<code>[stream.norm]</code>を付加します。<strong>翻訳ストリーム</strong>は、下の翻訳パネルで選択した方向に応じて、テキストの機械翻訳を送信し、先頭に<code>[stream.trans.JA]</code>または<code>[stream.trans.EN]</code>を付加します。",
                 "defaultStream": {
                     "label": "デフォルトストリーム",
                     "description": "プレフィックスのないストリーム。デフォルトで出力される内容です。"
@@ -212,17 +217,17 @@
                 },
                 "translationStream": {
                     "label": "翻訳ストリーム",
-                    "description": "テキストの機械翻訳を送信するストリームです。翻訳方向に応じて、先頭に<code>[stream.trans.JP]</code>（英語 → 日本語）または<code>[stream.trans.EN]</code>（日本語 → 英語）を付加します。下のパネルで設定できます。"
+                    "description": "テキストの機械翻訳を送信するストリームです。翻訳方向に応じて、先頭に<code>[stream.trans.JA]</code>（英語 → 日本語）または<code>[stream.trans.EN]</code>（日本語 → 英語）を付加します。下のパネルで設定できます。"
                 }
             },
             "translation": {
                 "description": "翻訳ストリームは、OPUS-MTモデルを使用して、認識されたテキストをブラウザー内でローカルに翻訳します（Transformers.jsによってワーカー内で実行されます）。モデルはデスクトップクライアントによってキャッシュフォルダーにダウンロードされ、そこから提供されます。そのため、翻訳中にインターネットからデータが取得されることはありません。また、下の翻訳方向が「無効」に設定されている間は何も実行されません。",
                 "direction": "翻訳方向",
-                "directionDescription": "英語 → 日本語の出力には<code>[stream.trans.JP]</code>が付加され、日本語 → 英語の出力には<code>[stream.trans.EN]</code>が付加されます。選択した方向のモデルは、初回使用時に読み込まれます。",
+                "directionDescription": "英語 → 日本語の出力には<code>[stream.trans.JA]</code>が付加され、日本語 → 英語の出力には<code>[stream.trans.EN]</code>が付加されます。選択した方向のモデルは、初回使用時に読み込まれます。",
                 "directionOptions": {
                     "off": "無効",
-                    "enJp": "英語 → 日本語",
-                    "jpEn": "日本語 → 英語"
+                    "enJa": "英語 → 日本語",
+                    "jaEn": "日本語 → 英語"
                 }
             },
             "naturalLanguageTools": {
@@ -294,7 +299,7 @@
                     "translationToggle": "翻訳ストリームのオンとオフを切り替えます。",
                     "translationEnable": "翻訳ストリームを有効にします。",
                     "translationDisable": "翻訳ストリームを無効にします。",
-                    "translationDirection": "翻訳方向を設定します（EN → JP、JP → EN、または無効）。"
+                    "translationDirection": "翻訳方向を設定します（EN → JA、JA → EN、または無効）。"
                 }
             }
         }

@@ -6,8 +6,9 @@
 //   - A WebSocket relay on the root path: any text frame received from one
 //     connected client is retransmitted to every other connected client.
 //
-// It also downloads the large voice models into a per-user cache folder on
-// start and serves them alongside the frontend (see modelcache.go).
+// It also downloads the non-Japanese voice models into a per-user cache
+// folder on start (the Japanese ones download on demand when the frontend
+// requests them) and serves them alongside the frontend (see modelcache.go).
 package main
 
 import (
