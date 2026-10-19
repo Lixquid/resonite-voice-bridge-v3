@@ -623,6 +623,85 @@ button {
   to { opacity: 0; transform: translateX(-50%) scale(0.9); }
 }
 
+/* Cache download toasts (see src/cacheStatus.ts): one stack, one progress
+   toast per downloading capability, transient success toasts on completion. */
+.cache-toasts {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  z-index: 1001;
+  pointer-events: none;
+}
+
+.cache-toast {
+  min-width: 300px;
+  max-width: 440px;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-strong);
+  color: var(--text);
+  font-size: 0.85rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  animation: toastIn 0.3s ease;
+}
+
+.cache-toast__title {
+  font-weight: 600;
+}
+
+.cache-toast__meta {
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.cache-toast__bar {
+  height: 4px;
+  margin-top: 0.45rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.cache-toast__fill {
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--good));
+  transition: width 200ms ease;
+}
+
+.cache-toast__bar.is-indeterminate .cache-toast__fill {
+  width: 40%;
+  animation: slide 1.2s ease-in-out infinite;
+}
+
+.cache-toast--success {
+  background: var(--good);
+  color: var(--bg);
+  font-weight: 600;
+  animation: cacheToastIn 0.3s ease, cacheToastOut 0.3s ease 2.5s forwards;
+}
+
+/* Fade-only variants: the shared toastIn/toastOut keyframes also translate
+   (they center a standalone toast), which would misplace toasts inside the
+   already-centered toast stack. */
+@keyframes cacheToastIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes cacheToastOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
 /* --- Settings gear + dialog -------------------------------------------- */
 
 .gear {

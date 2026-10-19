@@ -22,15 +22,24 @@ package main
 // convention as the settings file (see settings.go):
 // <UserCacheDir>/resonite-voice-bridge/ (e.g. ~/.cache/resonite-voice-bridge
 // on Linux, %LocalAppData%\resonite-voice-bridge on Windows).
+//
+// The download state of the cache is also reported over HTTP: GET /cache/
+// status (see serveCacheStatus) lists every file and every capability group
+// (see capabilityGroups) with what is cached so far.
+// <UserCacheDir>/resonite-voice-bridge/ (e.g. ~/.cache/resonite-voice-bridge
+// on Linux, %LocalAppData%\resonite-voice-bridge on Windows).
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -160,6 +169,94 @@ var cachePrefixes = []struct{ url, dir string }{
 	{translationURLPrefix, "translation"},
 }
 
+// A capability group: one feature of the app, named by the cache groups
+// (see cacheGroups) whose files it needs. This is the feature-facing view of
+// the cache, reported by the /cache/status endpoint (see serveCacheStatus).
+type capabilityGroup struct {
+	id   string
+	dirs []string
+}
+
+// capabilityGroups maps every feature onto the cache groups its files come
+// from. The groups (every cache group belongs to exactly one capability):
+//
+//   - shared: the Transformers.js library build with its ONNX Runtime Web
+//     backend, the runtime both the Moonshine streaming models and the
+//     OPUS-MT translation models run on — everything except Needle 3.
+//   - english-stt: the small and medium English Moonshine streaming models.
+//   - japanese-stt: the small and tiny Japanese Moonshine streaming models.
+//   - tool-calling: the Needle 3 engine (its own Emscripten WASM runtime,
+//     independent of the Transformers.js stack).
+//   - translate-en-ja and translate-ja-en: one OPUS-MT model per direction.
+func capabilityGroups() []capabilityGroup {
+	return []capabilityGroup{
+		{id: "shared", dirs: []string{filepath.Join("translation", "lib")}},
+		{
+			id: "english-stt",
+			dirs: []string{
+				filepath.Join("models", "small_streaming"),
+				filepath.Join("models", "medium_streaming"),
+			},
+		},
+		{
+			id: "japanese-stt",
+			dirs: []string{
+				filepath.Join("models", "small_streaming_ja"),
+				filepath.Join("models", "tiny_streaming_ja"),
+			},
+		},
+		{id: "tool-calling", dirs: []string{"needle3"}},
+		{id: "translate-en-ja", dirs: []string{filepath.Join("translation", "models", "opus-tatoeba-en-ja")}},
+		{id: "translate-ja-en", dirs: []string{filepath.Join("translation", "models", "opus-mt-ja-en")}},
+	}
+}
+
+// The JSON status endpoint (see serveCacheStatus).
+const cacheStatusPath = "/cache/status"
+
+// cacheFileStatus is the download status of one cached file: its
+// cache-relative slash path, the URL it is served under, whether it is fully
+// cached (a non-empty file exists — the same test the downloaders use), its
+// size in bytes (0 when not cached), and — while the backend is downloading
+// it right now — the live progress: downloading is true, received counts the
+// bytes fetched so far and total the size the server declared (0 when it did
+// not declare one).
+type cacheFileStatus struct {
+	Path        string `json:"path"`
+	URL         string `json:"url"`
+	Cached      bool   `json:"cached"`
+	Size        int64  `json:"size"`
+	Downloading bool   `json:"downloading"`
+	Received    int64  `json:"received"`
+	Total       int64  `json:"total"`
+}
+
+// cacheGroupStatus is the download status of one capability group: the
+// statuses of its files (in cache-group file order), the count of cached
+// files, the total file count, and whether every file is cached (the
+// capability is usable offline without a download). The byte sums drive the
+// frontend's progress bar: cached files count their size on both sides, a
+// downloading file counts its live received bytes and declared total, and a
+// file never requested yet (size unknown until its download starts) is left
+// out of both sums.
+type cacheGroupStatus struct {
+	ID               string            `json:"id"`
+	Files            []cacheFileStatus `json:"files"`
+	CachedFiles      int               `json:"cachedFiles"`
+	TotalFiles       int               `json:"totalFiles"`
+	DownloadingFiles int               `json:"downloadingFiles"`
+	ReceivedBytes    int64             `json:"receivedBytes"`
+	TotalBytes       int64             `json:"totalBytes"`
+	Ready            bool              `json:"ready"`
+}
+
+// cacheStatusReport is the whole /cache/status response: every individual
+// file (sorted by path, for stable output) and every capability group.
+type cacheStatusReport struct {
+	Files  []cacheFileStatus  `json:"files"`
+	Groups []cacheGroupStatus `json:"groups"`
+}
+
 // A cache-download group: a cache-relative directory, the pinned remote base
 // URL its files are fetched from, the files within it, and whether the group
 // is eager. The cache layout mirrors the served URL layout (models/… under
@@ -233,6 +330,96 @@ func cacheGroups() []cacheGroup {
 			files: translationModelFiles,
 		},
 	}
+}
+
+// cacheFileURL maps a cache-relative slash path back to the served URL it is
+// available under — the inverse of cacheRelPath. Only paths inside a served
+// prefix have a URL; anything else returns the empty string.
+func cacheFileURL(rel string) string {
+	for _, prefix := range cachePrefixes {
+		if strings.HasPrefix(rel, prefix.dir+"/") {
+			return prefix.url + strings.TrimPrefix(rel, prefix.dir)
+		}
+	}
+	return ""
+}
+
+// fileStatus inspects one cache-relative slash path in the cache directory.
+// A zero-size file counts as not cached, mirroring the downloader (see
+// downloadGroup: a truncated file is retried, never served). An in-flight
+// download of the file (see downloadProgressOf) overrides the absence: the
+// status reports the live byte progress instead of a bare "not cached".
+func fileStatus(rel string) cacheFileStatus {
+	status := cacheFileStatus{Path: rel, URL: cacheFileURL(rel)}
+	if info, err := os.Stat(filepath.Join(cacheDir(), filepath.FromSlash(rel))); err == nil && !info.IsDir() && info.Size() > 0 {
+		status.Cached = true
+		status.Size = info.Size()
+		status.Total = info.Size()
+		return status
+	}
+	if received, total, ok := downloadProgressOf(rel); ok {
+		status.Downloading = true
+		status.Received = received
+		status.Total = total
+	}
+	return status
+}
+
+// serveCacheStatus answers GET " + cacheStatusPath with a JSON report of what
+// is downloaded: one entry per individual file (see cacheFileStatus) and one
+// per capability group (see cacheGroupStatus). It returns false for anything
+// else — other paths and methods fall through to the caller's next handler.
+func serveCacheStatus(w http.ResponseWriter, r *http.Request) bool {
+	if r.URL.Path != cacheStatusPath || r.Method != http.MethodGet {
+		return false
+	}
+	// One status lookup per distinct file: the flat report and the group
+	// reports share the same entries, and a path is never inspected twice.
+	statuses := map[string]cacheFileStatus{}
+	for _, group := range cacheGroups() {
+		for _, name := range group.files {
+			rel := group.dir + "/" + name
+			if _, ok := statuses[rel]; !ok {
+				statuses[rel] = fileStatus(rel)
+			}
+		}
+	}
+	report := cacheStatusReport{Files: []cacheFileStatus{}, Groups: []cacheGroupStatus{}}
+	for _, rel := range slices.Sorted(maps.Keys(statuses)) {
+		report.Files = append(report.Files, statuses[rel])
+	}
+	for _, capability := range capabilityGroups() {
+		gs := cacheGroupStatus{ID: capability.id, Files: []cacheFileStatus{}}
+		for _, dir := range capability.dirs {
+			for _, group := range cacheGroups() {
+				if group.dir != dir {
+					continue
+				}
+				for _, name := range group.files {
+					st := statuses[dir+"/"+name]
+					gs.Files = append(gs.Files, st)
+					gs.TotalFiles++
+					if st.Cached {
+						gs.CachedFiles++
+						gs.ReceivedBytes += st.Size
+						gs.TotalBytes += st.Size
+					} else if st.Downloading {
+						gs.DownloadingFiles++
+						gs.ReceivedBytes += st.Received
+						gs.TotalBytes += st.Total
+					}
+				}
+			}
+		}
+		gs.Ready = gs.TotalFiles > 0 && gs.CachedFiles == gs.TotalFiles
+		report.Groups = append(report.Groups, gs)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	if err := json.NewEncoder(w).Encode(report); err != nil {
+		log.Printf("Cache status: cannot encode response: %v", err)
+	}
+	return true
 }
 
 // groupFileURL looks up one cache-relative slash path among the groups' file
@@ -419,7 +606,13 @@ func downloadFile(url, dest string) error {
 		return err
 	}
 	tmpName := tmp.Name()
-	written, copyErr := io.Copy(tmp, response.Body)
+	// Report live progress while the body streams (see downloadProgress and
+	// the /cache/status endpoint); removed on return, so the entry never
+	// outlives the download.
+	rel := relCachePath(dest)
+	beginDownload(rel, response.ContentLength)
+	defer endDownload(rel)
+	written, copyErr := io.Copy(tmp, &progressReader{r: response.Body, rel: rel})
 	closeErr := tmp.Close()
 	if copyErr == nil {
 		copyErr = closeErr
@@ -437,6 +630,73 @@ func downloadFile(url, dest string) error {
 	}
 	log.Printf("Model cache: %s: %s", relCachePath(dest), humanSize(written))
 	return nil
+}
+
+// downloadProgress is the live state of one in-flight download: bytes
+// received so far and the total the server declared (0 when it did not).
+type downloadProgress struct {
+	received int64
+	total    int64
+}
+
+// The downloads currently in flight, keyed by cache-relative path (guarded
+// by downloadsMu). Entries exist only while a download runs — beginDownload
+// adds, endDownload removes — so /cache/status reports "downloading" exactly
+// when a byte stream is actually in progress, whether the download was
+// started by the startup warmer or by an on-demand request.
+var (
+	downloadsMu     sync.Mutex
+	downloadsActive = map[string]*downloadProgress{}
+)
+
+// beginDownload registers an in-flight download of rel.
+func beginDownload(rel string, total int64) {
+	downloadsMu.Lock()
+	defer downloadsMu.Unlock()
+	downloadsActive[rel] = &downloadProgress{total: total}
+}
+
+// endDownload forgets the in-flight entry for rel: afterwards the file is
+// either cached (and reported as such) or absent again.
+func endDownload(rel string) {
+	downloadsMu.Lock()
+	defer downloadsMu.Unlock()
+	delete(downloadsActive, rel)
+}
+
+// downloadProgressAdd bumps the received count of an in-flight download.
+func downloadProgressAdd(rel string, n int64) {
+	downloadsMu.Lock()
+	defer downloadsMu.Unlock()
+	if state, ok := downloadsActive[rel]; ok {
+		state.received += n
+	}
+}
+
+// downloadProgressOf reports the live progress of rel, if it is downloading.
+func downloadProgressOf(rel string) (received, total int64, ok bool) {
+	downloadsMu.Lock()
+	defer downloadsMu.Unlock()
+	state, ok := downloadsActive[rel]
+	if !ok {
+		return 0, 0, false
+	}
+	return state.received, state.total, true
+}
+
+// progressReader counts the bytes streamed through it into the in-flight
+// download entry of its file (see downloadProgressOf).
+type progressReader struct {
+	r   io.Reader
+	rel string
+}
+
+func (pr *progressReader) Read(p []byte) (int, error) {
+	n, err := pr.r.Read(p)
+	if n > 0 {
+		downloadProgressAdd(pr.rel, int64(n))
+	}
+	return n, err
 }
 
 // relCachePath renders a cache path relative to the cache root, for logging.

@@ -1,13 +1,16 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // withTestCacheDir points the model cache at a fresh temporary directory for
@@ -355,4 +358,316 @@ func TestDownloadFile(t *testing.T) {
 func tempFiles(dir string) []string {
 	matches, _ := filepath.Glob(filepath.Join(dir, ".download-*"))
 	return matches
+}
+
+// TestCacheFileURL verifies the cache path to served URL mapping is the
+// exact inverse of cacheRelPath for every served prefix.
+func TestCacheFileURL(t *testing.T) {
+	cases := []struct {
+		rel string
+		url string
+	}{
+		{"models/small_streaming/encoder.ort", "/models/small_streaming/encoder.ort"},
+		{"models/tiny_streaming_ja/frontend.weights.ort", "/models/tiny_streaming_ja/frontend.weights.ort"},
+		{"needle3/needle3.cact", "/needle3/needle3.cact"},
+		{"needle3/wasm/needle.wasm", "/needle3/wasm/needle.wasm"},
+		{"translation/lib/transformers.min.js", "/translation/lib/transformers.min.js"},
+		{"translation/models/opus-mt-ja-en/onnx/encoder_model_quantized.onnx", "/translation/models/opus-mt-ja-en/onnx/encoder_model_quantized.onnx"},
+		{"", ""},
+		{"outside/file", ""},
+	}
+	for _, c := range cases {
+		if got := cacheFileURL(c.rel); got != c.url {
+			t.Errorf("cacheFileURL(%q) = %q, want %q", c.rel, got, c.url)
+		}
+	}
+}
+
+// TestCapabilityGroupsCoverAllCacheGroups verifies every cache group belongs
+// to exactly one capability group, so no downloadable file is missing from
+// the /cache/status report and none is reported twice.
+func TestCapabilityGroupsCoverAllCacheGroups(t *testing.T) {
+	owners := map[string]int{}
+	for _, capability := range capabilityGroups() {
+		for _, dir := range capability.dirs {
+			owners[dir]++
+		}
+	}
+	for _, group := range cacheGroups() {
+		if owners[group.dir] != 1 {
+			t.Errorf("cache group %q is referenced by %d capability groups, want exactly 1", group.dir, owners[group.dir])
+		}
+	}
+	if len(owners) != len(cacheGroups()) {
+		t.Errorf("capability groups reference %d cache groups, want %d", len(owners), len(cacheGroups()))
+	}
+}
+
+// TestServeCacheStatus verifies the /cache/status endpoint: it answers GET
+// requests with a JSON report of every individual file and every capability
+// group, non-GET requests fall through to the regular handler, and the
+// per-file cached/size fields mirror what is actually on disk.
+func TestServeCacheStatus(t *testing.T) {
+	dir := withTestCacheDir(t)
+
+	// Two files cached, several groups incomplete or empty.
+	cached := map[string]string{
+		"models/small_streaming/tokenizer.bin": "tok",
+		"translation/lib/transformers.min.js":  "lib",
+	}
+	for rel, content := range cached {
+		full := filepath.Join(dir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("MkdirAll: %v", err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+	}
+	// A zero-size file must be reported as not cached, like the downloader.
+	empty := filepath.Join(dir, "needle3", "needle3.cact")
+	if err := os.MkdirAll(filepath.Dir(empty), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(empty, nil, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Non-GET requests and other paths fall through (handled = false).
+	recorder := httptest.NewRecorder()
+	if serveCacheStatus(recorder, httptest.NewRequest("POST", cacheStatusPath, nil)) {
+		t.Error("POST /cache/status was handled, want fall-through")
+	}
+	if serveCacheStatus(recorder, httptest.NewRequest("GET", "/cache/status/extra", nil)) {
+		t.Error("GET /cache/status/extra was handled, want fall-through")
+	}
+
+	recorder = httptest.NewRecorder()
+	if !serveCacheStatus(recorder, httptest.NewRequest("GET", cacheStatusPath, nil)) {
+		t.Fatal("GET /cache/status was not handled")
+	}
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	if ct := recorder.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Errorf("Content-Type = %q, want application/json", ct)
+	}
+
+	var report cacheStatusReport
+	if err := json.Unmarshal(recorder.Body.Bytes(), &report); err != nil {
+		t.Fatalf("response is not valid JSON: %v\n%s", err, recorder.Body.String())
+	}
+
+	// The flat file list: one entry per distinct cached file, sorted by path.
+	wantCached := map[string]int64{
+		"models/small_streaming/tokenizer.bin": 3,
+		"translation/lib/transformers.min.js":  3,
+	}
+	seen := map[string]bool{}
+	for _, file := range report.Files {
+		if seen[file.Path] {
+			t.Errorf("file %q reported twice", file.Path)
+		}
+		seen[file.Path] = true
+		if file.URL == "" {
+			t.Errorf("file %q has no served URL", file.Path)
+		}
+		size, want := file.Size, wantCached[file.Path]
+		if want != 0 && (file.Cached != (size == want)) {
+			t.Errorf("file %q: cached = %v with size %d, want cached with size %d", file.Path, file.Cached, size, want)
+		}
+	}
+	if len(report.Files) != len(seen) {
+		t.Errorf("file list has %d entries, want %d", len(report.Files), len(seen))
+	}
+	for rel := range wantCached {
+		if !seen[rel] {
+			t.Errorf("cached file %q missing from the report", rel)
+		}
+	}
+	if !seen["needle3/needle3.cact"] {
+		t.Error("needle3/needle3.cact missing from the report")
+	}
+	for _, file := range report.Files {
+		if file.Path == "needle3/needle3.cact" && (file.Cached || file.Size != 0) {
+			t.Errorf("zero-size file %q: cached = %v, size = %d; want not cached", file.Path, file.Cached, file.Size)
+		}
+	}
+
+	// The capability groups: the six named capabilities, with ready,
+	// cachedFiles and totalFiles reflecting the cache contents.
+	wantGroups := map[string]struct {
+		cached int
+		total  int
+		ready  bool
+	}{
+		"shared":          {1, 3, false},
+		"english-stt":     {1, 14, false},
+		"japanese-stt":    {0, 16, false},
+		"tool-calling":    {0, 3, false},
+		"translate-en-ja": {0, 6, false},
+		"translate-ja-en": {0, 6, false},
+	}
+	for _, group := range report.Groups {
+		want, ok := wantGroups[group.ID]
+		if !ok {
+			t.Errorf("unexpected capability group %q", group.ID)
+			continue
+		}
+		if group.TotalFiles != want.total || group.CachedFiles != want.cached || group.Ready != want.ready {
+			t.Errorf("group %q: cachedFiles = %d, totalFiles = %d, ready = %v; want %d, %d, %v",
+				group.ID, group.CachedFiles, group.TotalFiles, group.Ready, want.cached, want.total, want.ready)
+		}
+		if group.Ready != (group.CachedFiles == group.TotalFiles && group.TotalFiles > 0) {
+			t.Errorf("group %q: ready = %v is inconsistent with %d/%d cached", group.ID, group.Ready, group.CachedFiles, group.TotalFiles)
+		}
+		if len(group.Files) != group.TotalFiles {
+			t.Errorf("group %q lists %d files, totalFiles = %d", group.ID, len(group.Files), group.TotalFiles)
+		}
+		delete(wantGroups, group.ID)
+	}
+	if len(wantGroups) != 0 {
+		for id := range wantGroups {
+			t.Errorf("capability group %q missing from the report", id)
+		}
+	}
+
+	// Once everything a capability needs is on disk, the group turns ready.
+	// Seed the whole shared group (the smallest one) and re-check.
+	for _, group := range cacheGroups() {
+		if group.dir != "translation/lib" {
+			continue
+		}
+		for _, name := range group.files {
+			full := filepath.Join(dir, filepath.FromSlash(group.dir), filepath.FromSlash(name))
+			if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+				t.Fatalf("MkdirAll: %v", err)
+			}
+			if err := os.WriteFile(full, []byte("x"), 0o644); err != nil {
+				t.Fatalf("WriteFile: %v", err)
+			}
+		}
+	}
+	recorder = httptest.NewRecorder()
+	if !serveCacheStatus(recorder, httptest.NewRequest("GET", cacheStatusPath, nil)) {
+		t.Fatal("second GET /cache/status was not handled")
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &report); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+	for _, group := range report.Groups {
+		if group.ID != "shared" {
+			continue
+		}
+		if !group.Ready || group.CachedFiles != group.TotalFiles {
+			t.Errorf("shared group: ready = %v with %d/%d cached, want ready", group.Ready, group.CachedFiles, group.TotalFiles)
+		}
+	}
+}
+
+// TestDownloadProgress verifies the live download registry: while
+// downloadFile streams a slow response, fileStatus reports the file as
+// downloading with growing received bytes and the declared total; after the
+// download finishes, the entry is gone and the file is cached.
+func TestDownloadProgress(t *testing.T) {
+	dir := withTestCacheDir(t)
+
+	// A slow stream of a known size with a declared Content-Length.
+	const payloadSize = 64
+	gotFirstRead := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", strconv.Itoa(payloadSize))
+		for i := 0; i < payloadSize; i++ {
+			if i == payloadSize/2 {
+				close(gotFirstRead)
+			}
+			_, _ = w.Write([]byte("x"))
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	dest := filepath.Join(dir, "needle3", "needle3.cact")
+	// downloadFile writes only; downloadGroup owns directory creation.
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- downloadFile(server.URL, dest) }()
+
+	// Wait until the download is midway, then inspect the live status.
+	<-gotFirstRead
+	status := fileStatus("needle3/needle3.cact")
+	if !status.Downloading {
+		t.Fatalf("midway status = %+v, want downloading", status)
+	}
+	if status.Received <= 0 || status.Received > payloadSize {
+		t.Errorf("midway received = %d, want 0 < received <= %d", status.Received, payloadSize)
+	}
+	if status.Total != payloadSize {
+		t.Errorf("midway total = %d, want %d (the declared Content-Length)", status.Total, payloadSize)
+	}
+	if status.Cached {
+		t.Error("midway status reports cached, want false until the rename")
+	}
+
+	// The group aggregates the live progress.
+	group := downloadGroupTestStatus("needle3")
+	if group.DownloadingFiles != 1 {
+		t.Errorf("group downloadingFiles = %d, want 1", group.DownloadingFiles)
+	}
+	if group.TotalBytes != payloadSize {
+		t.Errorf("group totalBytes = %d, want %d", group.TotalBytes, payloadSize)
+	}
+	if group.ReceivedBytes <= 0 || group.ReceivedBytes > payloadSize {
+		t.Errorf("group receivedBytes = %d, want 0 < received <= %d", group.ReceivedBytes, payloadSize)
+	}
+
+	// Once the download finishes, the entry is gone and the file is cached.
+	if err := <-done; err != nil {
+		t.Fatalf("downloadFile: %v", err)
+	}
+	if _, _, ok := downloadProgressOf("needle3/needle3.cact"); ok {
+		t.Error("download entry still present after completion, want removed")
+	}
+	status = fileStatus("needle3/needle3.cact")
+	if !status.Cached || status.Size != payloadSize {
+		t.Errorf("final status = %+v, want cached with size %d", status, payloadSize)
+	}
+}
+
+// downloadGroupTestStatus builds the capability group status for one cache
+// group directory, mirroring the aggregation in serveCacheStatus.
+func downloadGroupTestStatus(dir string) cacheGroupStatus {
+	for _, capability := range capabilityGroups() {
+		for _, d := range capability.dirs {
+			if d != dir {
+				continue
+			}
+			gs := cacheGroupStatus{ID: capability.id}
+			for _, group := range cacheGroups() {
+				if group.dir != dir {
+					continue
+				}
+				for _, name := range group.files {
+					st := fileStatus(dir + "/" + name)
+					gs.TotalFiles++
+					if st.Cached {
+						gs.CachedFiles++
+						gs.ReceivedBytes += st.Size
+						gs.TotalBytes += st.Size
+					} else if st.Downloading {
+						gs.DownloadingFiles++
+						gs.ReceivedBytes += st.Received
+						gs.TotalBytes += st.Total
+					}
+				}
+			}
+			return gs
+		}
+	}
+	return cacheGroupStatus{}
 }

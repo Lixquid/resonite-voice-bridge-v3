@@ -11,6 +11,7 @@
  * never blocks the transcription UI.
  */
 
+import { noteCacheActivity, releaseCacheActivity } from './cacheStatus';
 import { getWorkerLocale, t } from './i18n';
 
 /**
@@ -190,6 +191,9 @@ export function needleRun(
 ): Promise<NeedleResult> {
   const run = queue.then(async () => {
     trackDownload(onStatus);
+    // If the backend is still downloading the engine, the watcher polls its
+    // status endpoint and shows progress toasts until the download done.
+    noteCacheActivity(['tool-calling']);
     try {
       await ensureEngineLoaded(onStatus);
       if (loadedTools !== tools) {
@@ -207,6 +211,7 @@ export function needleRun(
         raw: parsed,
       };
     } finally {
+      releaseCacheActivity(['tool-calling']);
       onProgress = null;
     }
   });
@@ -225,9 +230,11 @@ export function needleRun(
 export function needlePrewarm(onStatus?: (message: string) => void): Promise<void> {
   const run = queue.then(async () => {
     trackDownload(onStatus);
+    noteCacheActivity(['tool-calling']);
     try {
       await ensureEngineLoaded(onStatus);
     } finally {
+      releaseCacheActivity(['tool-calling']);
       onProgress = null;
     }
   });

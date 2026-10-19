@@ -10,6 +10,7 @@ import {
 } from './moonshine';
 import { applyStaticTranslations, getLanguage, setLanguage, t, type Language } from './i18n';
 import './style.css';
+import { noteCacheActivity, releaseCacheActivity } from './cacheStatus';
 import { needlePrewarm, needleRun, type NeedleCall } from './needle';
 import {
   setTranslationDirection,
@@ -1884,54 +1885,64 @@ async function resolveModelUrls(key: ArchKey): Promise<Record<string, string>> {
   const localUrls = Object.fromEntries(files.map((name) => [name, `${local}/${name}`]));
   if (!remote) return localUrls; // bundled model: all local
 
-  // Probe every file on the local path, re-probing the misses until they all
-  // show up or the retry budget runs out. The first round runs immediately;
-  // every later round waits one interval, so a fully-cached model is served
-  // with zero added latency.
-  const missing = new Set<string>(files);
-  let found = 0;
-  let stalls = 0; // consecutive rounds that discovered no new file
-  while (missing.size > 0 && stalls <= PROBE_MAX_STALLED_ROUNDS) {
-    if (stalls > 0 || found > 0) await sleep(PROBE_INTERVAL_MS);
-    const before = found;
-    for (const name of [...missing]) {
-      if (await probeLocalFile(`${local}/${name}`)) missing.delete(name);
+  // The probing below requests the missing files — each request makes the
+  // backend download it on demand — so while that runs, the cache watcher
+  // polls the backend's /cache/status endpoint and shows a progress toast
+  // for every capability that is downloading (see src/cacheStatus.ts).
+  const capability = local.includes('_ja') ? 'japanese-stt' : 'english-stt';
+  noteCacheActivity([capability]);
+  try {
+    // Probe every file on the local path, re-probing the misses until they
+    // all show up or the retry budget runs out. The first round runs
+    // immediately; every later round waits one interval, so a fully-cached
+    // model is served with zero added latency.
+    const missing = new Set<string>(files);
+    let found = 0;
+    let stalls = 0; // consecutive rounds that discovered no new file
+    while (missing.size > 0 && stalls <= PROBE_MAX_STALLED_ROUNDS) {
+      if (stalls > 0 || found > 0) await sleep(PROBE_INTERVAL_MS);
+      const before = found;
+      for (const name of [...missing]) {
+        if (await probeLocalFile(`${local}/${name}`)) missing.delete(name);
+      }
+      found = files.length - missing.size;
+      if (missing.size === 0) break;
+      if (found > before) {
+        stalls = 0;
+        logEvent(t('log.modelProbeFound', { key, found, total: files.length }));
+        setStatus(
+          t('status.waitingForModelFiles', { key, found, total: files.length }),
+          'info',
+        );
+      } else {
+        stalls++;
+      }
     }
-    found = files.length - missing.size;
-    if (missing.size === 0) break;
-    if (found > before) {
-      stalls = 0;
-      logEvent(t('log.modelProbeFound', { key, found, total: files.length }));
-      setStatus(
-        t('status.waitingForModelFiles', { key, found, total: files.length }),
-        'info',
-      );
-    } else {
-      stalls++;
-    }
-  }
 
-  const result = { ...localUrls };
-  missing.forEach((name) => {
-    result[name] = `${remote}/${name}`;
-  });
-  const localCount = files.length - missing.size;
-  if (localCount === files.length) {
-    logEvent(t('log.modelFromLocal', { key, local }));
-  } else if (localCount === 0) {
-    logEvent(t('log.modelFromRemote', { key, remote }));
-  } else {
-    logEvent(
-      t('log.modelMixed', {
-        key,
-        localCount,
-        total: files.length,
-        local,
-        remote,
-      }),
-    );
+    const result = { ...localUrls };
+    missing.forEach((name) => {
+      result[name] = `${remote}/${name}`;
+    });
+    const localCount = files.length - missing.size;
+    if (localCount === files.length) {
+      logEvent(t('log.modelFromLocal', { key, local }));
+    } else if (localCount === 0) {
+      logEvent(t('log.modelFromRemote', { key, remote }));
+    } else {
+      logEvent(
+        t('log.modelMixed', {
+          key,
+          localCount,
+          total: files.length,
+          local,
+          remote,
+        }),
+      );
+    }
+    return result;
+  } finally {
+    releaseCacheActivity([capability]);
   }
-  return result;
 }
 
 /**

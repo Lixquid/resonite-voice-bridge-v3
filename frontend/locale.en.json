@@ -61,12 +61,31 @@
         }
     },
     "arch": {
-        "tiny": { "label": "Tiny · fastest" },
-        "small": { "label": "Small · balanced" },
-        "medium": { "label": "Medium · most accurate" }
+        "tiny": {
+            "label": "Tiny · fastest"
+        },
+        "small": {
+            "label": "Small · balanced"
+        },
+        "medium": {
+            "label": "Medium · most accurate"
+        }
     },
     "toast": {
         "copied": "Copied!"
+    },
+    "cache": {
+        "capability": {
+            "shared": "Shared engine files",
+            "englishStt": "English speech recognition",
+            "japaneseStt": "Japanese speech recognition",
+            "toolCalling": "Tool calling",
+            "translateEnJa": "English → Japanese translation",
+            "translateJaEn": "Japanese → English translation"
+        },
+        "downloading": "{label}: downloading — {received} / {total} MB ({cachedFiles}/{totalFiles} files)",
+        "preparing": "{label}: preparing download…",
+        "success": "{label}: download complete ✓"
     },
     "needle": {
         "status": {
@@ -177,7 +196,7 @@
             },
             "naturalLanguageToolCalling": {
                 "label": "Natural Language Tool Calling",
-                "description": "Run recognized text that starts with the wake word through the Needle\u00a03 engine and emit tool call frames. Configure it in the panel below."
+                "description": "Run recognized text that starts with the wake word through the Needle 3 engine and emit tool call frames. Configure it in the panel below."
             }
         },
         "cards": {
@@ -225,7 +244,7 @@
                 }
             },
             "naturalLanguageTools": {
-                "description": "Recognized text that starts with the wake word is run through the Needle\u00a03 model (downloaded into the desktop client's cache folder and served from there) together with the tool definitions below. Each successful tool call is emitted as <code>[tool.sep]TOOL_NAME\u00a0<var>GS</var>\u00a0KEY=VALUE\u00a0<var>RS</var>\u00a0KEY2=VALUE</code>, where GS/RS are the group and record separator control characters. Transcribed text keeps streaming as usual.",
+                "description": "Recognized text that starts with the wake word is run through the Needle 3 model (downloaded into the desktop client's cache folder and served from there) together with the tool definitions below. Each successful tool call is emitted as <code>[tool.sep]TOOL_NAME <var>GS</var> KEY=VALUE <var>RS</var> KEY2=VALUE</code>, where GS/RS are the group and record separator control characters. Transcribed text keeps streaming as usual.",
                 "fields": {
                     "wakeWord": {
                         "label": "Wake Word",

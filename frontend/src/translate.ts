@@ -29,6 +29,7 @@ export type TranslationDirection = 'en-ja' | 'ja-en';
  * The URL must be absolute: the worker is created from a blob URL, where
  * origin-relative paths do not resolve against the page.
  */
+import { noteCacheActivity, releaseCacheActivity } from './cacheStatus';
 import { getWorkerLocale, t } from './i18n';
 
 const TRANSLATION_BASE = `${window.location.origin}/translation`;
@@ -287,6 +288,11 @@ async function pump(): Promise<void> {
     // Shown immediately: the desktop client may download for a while before
     // the first byte reaches the browser (and with it, the first event).
     onProgress(t('translation.status.preparing', { label: directionLabel(job.dir) }));
+    // While the desktop client is still downloading the library or the
+    // direction's model, its /cache/status endpoint reports live progress:
+    // the watcher polls it and shows a progress toast per capability until
+    // the download finishes (the worker's fetches then simply succeed).
+    noteCacheActivity(['shared', job.dir === 'ja-en' ? 'translate-ja-en' : 'translate-en-ja']);
     if (job.kind === 'load') {
       await rpc({ type: 'load', dir: job.dir, base: TRANSLATION_BASE });
       job.resolve(null);
@@ -307,6 +313,7 @@ async function pump(): Promise<void> {
       handlers?.onLog(t('translation.log.error', { message: (err as Error).message }), true);
     }
   } finally {
+    releaseCacheActivity(['shared', job.dir === 'ja-en' ? 'translate-ja-en' : 'translate-en-ja']);
     processing = false;
     onProgress = null;
     void pump();

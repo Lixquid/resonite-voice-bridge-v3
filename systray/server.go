@@ -29,6 +29,11 @@ func newHandler() http.Handler {
 			http.ServeFileFS(w, r, frontendFS, "index.html")
 			return
 		}
+		// The cache status endpoint answers before the embedded files win,
+		// so a same-named frontend asset can never shadow it.
+		if serveCacheStatus(w, r) {
+			return
+		}
 		if existsInFS(frontendFS, r.URL.Path[1:]) {
 			serveStaticFile(w, r, r.URL.Path[1:])
 			return

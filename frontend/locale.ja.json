@@ -74,6 +74,19 @@
     "toast": {
         "copied": "コピーしました！"
     },
+    "cache": {
+        "capability": {
+            "shared": "共通エンジンファイル",
+            "englishStt": "英語音声認識",
+            "japaneseStt": "日本語音声認識",
+            "toolCalling": "ツール呼び出し",
+            "translateEnJa": "英語 → 日本語翻訳",
+            "translateJaEn": "日本語 → 英語翻訳"
+        },
+        "downloading": "{label}: ダウンロード中 — {received} / {total} MB（{cachedFiles}/{totalFiles} ファイル）",
+        "preparing": "{label}: ダウンロードを準備中…",
+        "success": "{label}: ダウンロード完了 ✓"
+    },
     "needle": {
         "status": {
             "loadingEngine": "Needle: エンジンを読み込み中…",
@@ -183,7 +196,7 @@
             },
             "naturalLanguageToolCalling": {
                 "label": "自然言語によるツール呼び出し",
-                "description": "ウェイクワードで始まる認識テキストをNeedle\u00a03エンジンで処理し、ツール呼び出しフレームを出力します。下のパネルで設定できます。"
+                "description": "ウェイクワードで始まる認識テキストをNeedle 3エンジンで処理し、ツール呼び出しフレームを出力します。下のパネルで設定できます。"
             }
         },
         "cards": {
@@ -231,7 +244,7 @@
                 }
             },
             "naturalLanguageTools": {
-                "description": "ウェイクワードで始まる認識テキストは、下記のツール定義とともにNeedle\u00a03モデルで処理されます。モデルはデスクトップクライアントのキャッシュフォルダーにダウンロードされ、そこから提供されます。成功した各ツール呼び出しは、<code>[tool.sep]TOOL_NAME\u00a0<var>GS</var>\u00a0KEY=VALUE\u00a0<var>RS</var>\u00a0KEY2=VALUE</code>の形式で出力されます。GS/RSは、それぞれグループ区切り文字とレコード区切り文字の制御文字です。文字起こしテキストは通常どおりストリーミング出力されます。",
+                "description": "ウェイクワードで始まる認識テキストは、下記のツール定義とともにNeedle 3モデルで処理されます。モデルはデスクトップクライアントのキャッシュフォルダーにダウンロードされ、そこから提供されます。成功した各ツール呼び出しは、<code>[tool.sep]TOOL_NAME <var>GS</var> KEY=VALUE <var>RS</var> KEY2=VALUE</code>の形式で出力されます。GS/RSは、それぞれグループ区切り文字とレコード区切り文字の制御文字です。文字起こしテキストは通常どおりストリーミング出力されます。",
                 "fields": {
                     "wakeWord": {
                         "label": "ウェイクワード",
