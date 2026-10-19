@@ -35,7 +35,18 @@ func main() {
 		return
 	}
 
+	// Redirect logging into the per-user log file (wiped on every start, so
+	// it always reflects the current session) before any message is logged,
+	// so even the startup banner and early failures land in the file.
+	logPath, err := setupLogFile()
+	if err != nil {
+		log.Printf("Logging to file unavailable: %v", err)
+	}
+
 	log.Printf("Resonite Voice Bridge %s", appVersion())
+	if logPath != "" {
+		log.Printf("Recording logs to %s", logPath)
+	}
 
 	// Wipe the model cache when asked, before the background warm-up starts,
 	// so every model is re-downloaded from scratch (e.g. after a corrupt or
@@ -91,6 +102,14 @@ func onReady() {
 
 	mOpen := systray.AddMenuItem("Open Web Interface", "Open http://localhost:"+listenPort+" in your browser")
 
+	// Entry opening the session log file (see logfile.go) with the default
+	// text viewer of the operating system. It is disabled when no log file
+	// could be set up at startup.
+	mLog := systray.AddMenuItem("View Log File", "Open the log file in your default text viewer")
+	if theLogFilePath == "" {
+		mLog.Disable()
+	}
+
 	// Informational entry showing how many clients are currently connected
 	// to the relay. It is disabled and refreshed once a second.
 	mClients := systray.AddMenuItem("", "Clients currently connected to the relay")
@@ -128,6 +147,10 @@ func onReady() {
 				}
 			case <-mOpen.ClickedCh:
 				openBrowser("http://localhost:" + listenPort)
+			case <-mLog.ClickedCh:
+				if theLogFilePath != "" {
+					openFile(theLogFilePath)
+				}
 			case <-mQuit.ClickedCh:
 				systray.Quit()
 				return
