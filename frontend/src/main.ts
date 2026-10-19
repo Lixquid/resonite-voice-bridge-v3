@@ -8,7 +8,7 @@ import {
   type MoonshineModule,
   type TranscriptLine,
 } from './moonshine';
-import { t } from './i18n';
+import { applyStaticTranslations, setLanguage, t } from './i18n';
 import './style.css';
 import { needlePrewarm, needleRun, type NeedleCall } from './needle';
 import {
@@ -757,6 +757,42 @@ let locale: Locale = (() => {
   return document.documentElement.lang === 'jp' ? 'jp' : 'en';
 })();
 
+// Point the i18n helper at the active locale before any t() call renders text.
+setLanguage(locale);
+// Fill in the static HTML strings (data-i18n / data-i18n-html attributes).
+applyStaticTranslations();
+
+/** The locale key behind the current mic label (see {@link setMicLabel}). */
+let micLabelKey = 'mic.label.ready';
+/** Whether the mic button currently advertises starting or stopping. */
+let micAriaState: 'start' | 'stop' = 'start';
+
+/** Sets the mic label, remembering the key so a language switch can re-apply it. */
+function setMicLabel(key: string): void {
+  micLabelKey = key;
+  els.micLabel.textContent = t(key);
+}
+
+/** Sets the mic button's aria-label, tracking it for the same reason. */
+function setMicAria(state: 'start' | 'stop'): void {
+  micAriaState = state;
+  els.mic.setAttribute('aria-label', t(`mic.aria.${state}`));
+}
+
+/**
+ * Re-renders the strings that are already on screen after a language switch.
+ * Everything rendered later goes through t() at render time and picks the new
+ * language up automatically.
+ */
+function rerenderLocalizedText(): void {
+  applyStaticTranslations();
+  setWsState(wsState);
+  mountArchChips();
+  renderReplacements();
+  setMicLabel(micLabelKey);
+  setMicAria(micAriaState);
+}
+
 /** Renders the active locale into the button flag and menu selection. */
 function renderLocale(): void {
   els.localeFlag.innerHTML = LOCALE_FLAGS[locale];
@@ -774,6 +810,8 @@ function setLocale(next: Locale): void {
   locale = next;
   localStorage.setItem('appLocale', next);
   document.documentElement.lang = next;
+  setLanguage(next);
+  rerenderLocalizedText();
   renderLocale();
   closeLocaleMenu();
 }
@@ -1087,13 +1125,14 @@ function sendFrame(kind: FrameKind, rawText: string, options: SendOptions = {}):
 interface Arch {
   key: ArchKey;
   name: ArchName;
-  label: string;
 }
 
+// Labels are looked up through t() when the chips are mounted, so a language
+// switch re-renders them (see mountArchChips).
 const ARCHES: Arch[] = [
-  { key: 'tiny', name: 'TinyStreaming', label: t('arch.tiny.label') },
-  { key: 'small', name: 'SmallStreaming', label: t('arch.small.label') },
-  { key: 'medium', name: 'MediumStreaming', label: t('arch.medium.label') },
+  { key: 'tiny', name: 'TinyStreaming' },
+  { key: 'small', name: 'SmallStreaming' },
+  { key: 'medium', name: 'MediumStreaming' },
 ];
 
 /** Default model size when nothing (valid) is persisted. */
@@ -1335,7 +1374,7 @@ function setSending(enabled: boolean): void {
     lastSentTranslation = '';
     cancelPartialTranslation();
   }
-  els.micLabel.textContent = enabled ? t('mic.label.listening') : t('mic.label.muted');
+  setMicLabel(enabled ? 'mic.label.listening' : 'mic.label.muted');
   setStatus(
     enabled ? t('status.transcribing') : t('status.muted'),
     enabled ? 'ready' : 'info',
@@ -1697,13 +1736,13 @@ function isMicPermissionError(err: unknown): boolean {
 
 /** Model loaded and idle: the mic can be pressed again. */
 function showReadyState(): void {
-  els.micLabel.textContent = t('mic.label.ready');
+  setMicLabel('mic.label.ready');
   setStatus(t('status.modelReady'), 'ready');
 }
 
 /** Microphone access refused by the user (or previously denied). */
 function showPermissionDeniedState(): void {
-  els.micLabel.textContent = t('mic.label.failed');
+  setMicLabel('mic.label.failed');
   setStatus(t('error.micDenied'), 'error');
 }
 
@@ -1726,7 +1765,7 @@ async function ensureMicPermission(): Promise<void> {
   const state = await currentMicPermission();
   if (state === 'denied') throw micPermissionError();
   if (state !== 'prompt') return; // already granted
-  els.micLabel.textContent = t('mic.label.waitingPermission');
+  setMicLabel('mic.label.waitingPermission');
   setStatus(t('status.authorizePermission'), 'info');
   try {
     // Triggers the browser's permission dialog; the stream is released right
@@ -1759,7 +1798,7 @@ async function loadBinding(): Promise<MoonshineModule> {
 
 async function startListening(): Promise<void> {
   els.mic.disabled = true;
-  els.micLabel.textContent = t('mic.label.starting');
+  setMicLabel('mic.label.starting');
   try {
     await micReady; // the model may still be downloading on first press
     if (!mic) await loadModel();
@@ -1768,15 +1807,15 @@ async function startListening(): Promise<void> {
     running = true;
     sending = true; // a fresh start always sends
     document.body.dataset.state = 'listening';
-    els.mic.setAttribute('aria-label', t('mic.aria.stop'));
-    els.micLabel.textContent = t('mic.label.listening');
+    setMicAria('stop');
+    setMicLabel('mic.label.listening');
     setStatus(t('status.transcribing'), 'ready');
     onMicEnabled();
   } catch (err) {
     if (isMicPermissionError(err)) {
       showPermissionDeniedState();
     } else {
-      els.micLabel.textContent = t('mic.label.ready');
+      setMicLabel('mic.label.ready');
       setStatus((err as Error).message, 'error');
     }
   } finally {
@@ -1791,7 +1830,7 @@ async function stopListening(): Promise<void> {
   sending = true; // reset silently — the [disabled] frame below covers the stop
   els.live.textContent = '';
   document.body.dataset.state = 'idle';
-  els.mic.setAttribute('aria-label', t('mic.aria.start'));
+  setMicAria('start');
   showReadyState();
   els.mic.disabled = false;
   onMicDisabled();
@@ -1818,12 +1857,13 @@ async function selectArch(key: ArchKey): Promise<void> {
 }
 
 function mountArchChips(): void {
+  els.archChips.replaceChildren();
   for (const arch of ARCHES) {
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.className = `chip${arch.key === selectedArch ? ' is-active' : ''}`;
     chip.dataset.arch = arch.key;
-    chip.textContent = arch.label;
+    chip.textContent = t(`arch.${arch.key}.label`);
     chip.addEventListener('click', () => void selectArch(arch.key));
     els.archChips.append(chip);
   }
@@ -1970,7 +2010,7 @@ void (async () => {
   } catch {
     // loadBinding already logged the details to the STATUS panel; make the
     // failure visible in the mic area instead of dying silently.
-    els.micLabel.textContent = t('mic.label.failed');
+    setMicLabel('mic.label.failed');
     setStatus(t('error.bindingFailed'), 'error');
     return;
   }

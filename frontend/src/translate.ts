@@ -29,7 +29,7 @@ export type TranslationDirection = 'en-jp' | 'jp-en';
  * The URL must be absolute: the worker is created from a blob URL, where
  * origin-relative paths do not resolve against the page.
  */
-import { t, workerLocale } from './i18n';
+import { getWorkerLocale, t } from './i18n';
 
 const TRANSLATION_BASE = `${window.location.origin}/translation`;
 
@@ -63,8 +63,9 @@ function directionLabel(dir: TranslationDirection): string {
  * pipeline per direction cached, and serializes all operations on a promise
  * chain so concurrent requests cannot double-load a model.
  */
-const WORKER_SOURCE = `
-const L = ${JSON.stringify(workerLocale.translation)};
+function workerSource(): string {
+  return `
+const L = ${JSON.stringify(getWorkerLocale().translation)};
 function fmt(s, p) { for (var k in p) { s = s.split("{" + k + "}").join(p[k]); } return s; }
 const DIRECTIONS = { 'en-jp': 'opus-tatoeba-en-ja', 'jp-en': 'opus-mt-ja-en' };
 let lib = null;
@@ -154,6 +155,7 @@ self.onmessage = (event) => {
   });
 };
 `;
+}
 
 /** Progress and logging callbacks, supplied once by the application. */
 export interface TranslationHandlers {
@@ -325,7 +327,7 @@ function releaseTranslation(): void {
 function ensureWorker(): void {
   if (worker) return;
   worker = new Worker(
-    URL.createObjectURL(new Blob([WORKER_SOURCE], { type: 'text/javascript' })),
+    URL.createObjectURL(new Blob([workerSource()], { type: 'text/javascript' })),
     { type: 'module' },
   );
   worker.onmessage = (event: MessageEvent) => {

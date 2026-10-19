@@ -130,5 +130,156 @@
             "disabledToolNotFound": "Natural Language Tools: disabled tool \"{name}\" not found.",
             "liveToolNotFound": "Natural Language Tools: live tool \"{name}\" not found."
         }
+    },
+    "ui": {
+        "section": {
+            "wsConnection": "WebSocket connection",
+            "microphone": "Microphone",
+            "settings": "Settings",
+            "wordReplacement": "Word Replacement",
+            "streamConfiguration": "Stream Configuration",
+            "translation": "Translation",
+            "naturalLanguageTools": "Natural Language Tools",
+            "documentation": "Documentation",
+            "status": "Status"
+        },
+        "settings": {
+            "voiceRecognitionModel": "Voice Recognition Model:",
+            "advancedSettings": "Advanced Settings",
+            "sendEvents": {
+                "label": "Send Events",
+                "description": "Send <code>[eventName]</code> frames. See \"Events\" below for details."
+            },
+            "removePunctuation": {
+                "label": "Remove Punctuation",
+                "description": "Keep only letters, numbers, and spaces, and lowercase everything before sending."
+            },
+            "streamedOutput": {
+                "label": "Streamed Output",
+                "description": "Send text as it's recognized, instead of when you stop talking."
+            },
+            "enableCommands": {
+                "label": "Enable Commands",
+                "description": "Let the WebSocket relay control this bridge by sending commands. See \"Commands\" below for details."
+            },
+            "wordReplacement": {
+                "label": "Word Replacement",
+                "description": "Swap words for replacements before they are sent over the WebSocket. Manage the list in the panel below."
+            },
+            "streamConfiguration": {
+                "label": "Stream Configuration",
+                "description": "Send additional copies of the recognized text as separate streams. Configure them in the panel below."
+            },
+            "naturalLanguageToolCalling": {
+                "label": "Natural Language Tool Calling",
+                "description": "Run recognized text that starts with the wake word through the Needle\u00a03 engine and emit tool call frames. Configure it in the panel below."
+            }
+        },
+        "cards": {
+            "wordReplacement": {
+                "description": "Every occurrence of a target word in the voice text is replaced with its replacement before sending. Matching ignores case; the replacement follows the case of the matched word."
+            },
+            "streamConfiguration": {
+                "description": "Each enabled stream sends its own copy of the recognized text. The <strong>Default Stream</strong> is sent as-is and respects \"Remove Punctuation\". The <strong>Original Stream</strong> sends the text straight from the model with <code>[stream.orig]</code> in front, ignoring \"Remove Punctuation\". The <strong>Normalized Stream</strong> sends the text with punctuation removed (always, regardless of the setting) with <code>[stream.norm]</code> in front. The <strong>Translation Stream</strong> sends a machine translation of the text with <code>[stream.trans.JP]</code> or <code>[stream.trans.EN]</code> in front, depending on the direction chosen in the Translation panel below.",
+                "defaultStream": {
+                    "label": "Default Stream",
+                    "description": "The stream with no prefix — what is emitted by default."
+                },
+                "originalStream": {
+                    "label": "Original Stream",
+                    "description": "The model's raw text, untransformed, prefixed with <code>[stream.orig]</code>."
+                },
+                "normalizedStream": {
+                    "label": "Normalized Stream",
+                    "description": "The text with punctuation removed, prefixed with <code>[stream.norm]</code>."
+                },
+                "translationStream": {
+                    "label": "Translation Stream",
+                    "description": "A machine translation of the text, prefixed with <code>[stream.trans.JP]</code> (EN → JP) or <code>[stream.trans.EN]</code> (JP → EN). Configure it in the panel below."
+                }
+            },
+            "translation": {
+                "description": "The Translation Stream translates the recognized text locally in the browser with OPUS-MT models (run by Transformers.js in a worker). The models are downloaded by the desktop client into its cache folder and served from there — nothing is fetched from the internet during translation, and nothing runs while the direction below is set to Disabled.",
+                "direction": "Translation Direction",
+                "directionDescription": "EN → JP output goes out as <code>[stream.trans.JP]</code>; JP → EN output as <code>[stream.trans.EN]</code>. The model for the chosen direction is loaded on first use.",
+                "directionOptions": {
+                    "off": "Disabled",
+                    "enJp": "English → Japanese",
+                    "jpEn": "Japanese → English"
+                }
+            },
+            "naturalLanguageTools": {
+                "description": "Recognized text that starts with the wake word is run through the Needle\u00a03 model (downloaded into the desktop client's cache folder and served from there) together with the tool definitions below. Each successful tool call is emitted as <code>[tool.sep]TOOL_NAME\u00a0<var>GS</var>\u00a0KEY=VALUE\u00a0<var>RS</var>\u00a0KEY2=VALUE</code>, where GS/RS are the group and record separator control characters. Transcribed text keeps streaming as usual.",
+                "fields": {
+                    "wakeWord": {
+                        "label": "Wake Word",
+                        "placeholder": "hey bridge",
+                        "description": "The word to listen for to start tool processing. Messages that don't start with it are ignored."
+                    },
+                    "tools": {
+                        "label": "Tools",
+                        "aria": "Tool definitions",
+                        "description": "A JSON array of tool definition blocks (OpenAI-style function schemas)."
+                    },
+                    "disabledTools": {
+                        "label": "Disabled Tools",
+                        "aria": "Disabled tool definitions",
+                        "description": "Tool definitions that are disabled and not sent to the model. Tools are moved here and back with the <code>naturalLanguageToolsDisableTool</code> / <code>naturalLanguageToolsEnableTool</code> commands."
+                    },
+                    "confidence": {
+                        "label": "Confidence Threshold",
+                        "description": "A number from 0 to 1. Outputs below this threshold are logged but don't emit tool calls."
+                    }
+                }
+            }
+        },
+        "doc": {
+            "events": {
+                "summary": "Events",
+                "items": {
+                    "speechEnded": "Sent whenever the user stops speaking.",
+                    "enabled": "Sent when transcription has been enabled.",
+                    "disabled": "Sent when transcription has been disabled.",
+                    "removePunctuationEnabled": "Sent when the punctuation removal feature has been enabled.",
+                    "removePunctuationDisabled": "Sent when the punctuation removal feature has been disabled.",
+                    "outputStreamingEnabled": "Sent when the output streaming feature has been enabled.",
+                    "outputStreamingDisabled": "Sent when the output streaming feature has been disabled.",
+                    "replacementEnabled": "Sent when the word replacement feature has been enabled.",
+                    "replacementDisabled": "Sent when the word replacement feature has been disabled.",
+                    "naturalLanguageToolsEnabled": "Sent when the natural language tool calling feature has been enabled.",
+                    "naturalLanguageToolsDisabled": "Sent when the natural language tool calling feature has been disabled.",
+                    "translationEnabled": "Sent when the translation feature has been enabled.",
+                    "translationDisabled": "Sent when the translation feature has been disabled."
+                }
+            },
+            "commands": {
+                "summary": "Commands",
+                "hint": "Incoming messages over the WebSocket relay that change how the bridge functions. Only honored while the \"Enable Commands\" setting is on.",
+                "items": {
+                    "toggle": "Toggles the microphone on and off.",
+                    "enable": "Enables transcription (starts the microphone if needed, otherwise resumes sending frames).",
+                    "disable": "Disables transcription (the microphone stays live; no frames are sent until the next enable).",
+                    "removePunctuationToggle": "Toggles the punctuation removal on and off.",
+                    "removePunctuationEnable": "Enables the punctuation removal.",
+                    "removePunctuationDisable": "Disables the punctuation removal.",
+                    "outputStreamingToggle": "Toggles the output streaming on and off.",
+                    "outputStreamingEnable": "Enables the output streaming.",
+                    "outputStreamingDisable": "Disables the output streaming.",
+                    "replacementToggle": "Toggles the word replacement on and off.",
+                    "replacementEnable": "Enables the word replacement.",
+                    "replacementDisable": "Disables the word replacement.",
+                    "naturalLanguageToolsToggle": "Toggles the natural language tool calling on and off.",
+                    "naturalLanguageToolsEnable": "Enables the natural language tool calling.",
+                    "naturalLanguageToolsDisable": "Disables the natural language tool calling.",
+                    "naturalLanguageToolsDisableTool": "Disables the specific tool with the given name.",
+                    "naturalLanguageToolsEnableTool": "Re-enables the specific tool with the given name.",
+                    "naturalLanguageToolsEnableOnlyTools": "Enables the given tools, and disables all tools not mentioned.",
+                    "translationToggle": "Toggles the Translation Stream on and off.",
+                    "translationEnable": "Enables the Translation Stream.",
+                    "translationDisable": "Disables the Translation Stream.",
+                    "translationDirection": "Sets the translation direction (EN → JP, JP → EN, or disabled)."
+                }
+            }
+        }
     }
 }

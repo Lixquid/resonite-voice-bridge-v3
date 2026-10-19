@@ -1,0 +1,291 @@
+{
+    "mic": {
+        "label": {
+            "failed": "失敗",
+            "listening": "リスニング中",
+            "muted": "ミュート中",
+            "ready": "準備完了",
+            "starting": "起動中…",
+            "waitingPermission": "マイクの使用許可を待っています..."
+        },
+        "aria": {
+            "stop": "リスニングを停止",
+            "start": "リスニングを開始"
+        }
+    },
+    "status": {
+        "transcribing": "文字起こし中",
+        "muted": "マイクは動作中 — 文字起こしは抑制されています",
+        "modelReady": "モデルの準備完了 — マイクを押して送信を開始してください",
+        "authorizePermission": "送信を開始するには、許可ダイアログでアクセスを許可してください",
+        "modelLoading": "{key} モデルを読み込み中…",
+        "waitingForModelFiles": "{key} モデルのダウンロード完了を待っています（{found}/{total} ファイル）…"
+    },
+    "error": {
+        "micDenied": "マイクの使用が許可されませんでした",
+        "bindingFailed": "Moonshine バインディングの読み込みに失敗しました",
+        "modelLoadFailed": "モデルの読み込みに失敗しました: {message}",
+        "bindingLoadFailed": "バインディング: {url} からの読み込みに失敗しました — {message}",
+        "unknownCommand": "不明なコマンド: {command}",
+        "invalidTranslationDirection": "翻訳: 不明な翻訳方向 \"{arg}\"（EN_JP、JP_EN、または OFF を指定してください）。",
+        "missingElement": "#{id} が見つかりません — index.html と main.ts の内容が一致していません。"
+    },
+    "log": {
+        "modelLoading": "モデル {key}: 読み込み中…",
+        "modelLoadFailed": "モデル {key}: 読み込みに失敗しました — {message}",
+        "modelLoaded": "モデル {key}: 正常に読み込まれました。",
+        "modelFromLocal": "モデル {key}: {local} から読み込み中（すべてのファイルがローカルにあります）。",
+        "modelFromRemote": "モデル {key}: サーバー上に見つかりません — {remote} から読み込み中。",
+        "modelMixed": "モデル {key}: {local} から {localCount}/{total} ファイルを読み込み、残りは {remote} から読み込みます。",
+        "modelProbeFound": "モデル {key}: サーバー上に {found}/{total} ファイルを確認 — 残りを待っています…",
+        "commandIgnored": "コマンドを無視しました（コマンドは無効です）: {command}",
+        "wsConnecting": "WebSocket: {url} に接続中…",
+        "wsConnected": "WebSocket: {url} に接続しました",
+        "wsInvalidUrl": "WebSocket: 無効な URL — {message}",
+        "wsDisconnected": "WebSocket: 切断されました（ユーザー操作）。",
+        "wsConnectCancelled": "WebSocket: 接続がキャンセルされました。",
+        "wsFailed": "WebSocket: 接続に失敗したか切断されました — 10 秒ごとに再試行します。",
+        "pauseNotSent": "⏸ 一時停止（未送信）"
+    },
+    "ws": {
+        "state": {
+            "disconnected": "— 切断中",
+            "connecting": "— 接続中…",
+            "connected": "— 接続済み",
+            "retrying": "— 10 秒ごとに再試行中"
+        },
+        "button": {
+            "connect": "接続",
+            "disconnect": "切断",
+            "cancel": "キャンセル"
+        }
+    },
+    "arch": {
+        "tiny": {
+            "label": "Tiny · 最速"
+        },
+        "small": {
+            "label": "Small · バランス型"
+        },
+        "medium": {
+            "label": "Medium · 最高精度"
+        }
+    },
+    "toast": {
+        "copied": "コピーしました！"
+    },
+    "needle": {
+        "status": {
+            "loadingEngine": "Needle: エンジンを読み込み中…",
+            "preparingTools": "Needle: ツールを準備中…"
+        },
+        "log": {
+            "downloading": "Needle: モデルをダウンロード中 — {mb} MB",
+            "downloadingWithTotal": "Needle: モデルをダウンロード中 — {mb} / {total} MB",
+            "noToolCalls": "Needle: ツール呼び出しなし（信頼度 {confidence}）。",
+            "belowThreshold": "Needle: 信頼度 {confidence} がしきい値 {threshold} を下回っています — 記録済み、出力されません: {described}",
+            "error": "Needle: {message}"
+        },
+        "error": {
+            "downloadFailed": "ダウンロードに失敗しました（{reason}）: {url}",
+            "modelLoadFailed": "モデルの読み込みに失敗しました",
+            "toolsRejected": "エンジンによってツールのスキーマが拒否されました",
+            "workerFailed": "Needle エンジンのワーカーでエラーが発生しました",
+            "notRunning": "Needle エンジンのワーカーが実行されていません"
+        }
+    },
+    "translation": {
+        "label": {
+            "en-jp": "英語 → 日本語",
+            "jp-en": "日本語 → 英語"
+        },
+        "status": {
+            "preparing": "翻訳: {label} モデルを準備中…",
+            "downloading": "翻訳: {label} モデルをダウンロード中 — {loaded} / {total} MB",
+            "loading": "翻訳: {label} モデルを読み込み中（{file}）…"
+        },
+        "log": {
+            "queueOverflow": "翻訳: キューがあふれました — 保留中のリクエストのうち、最も古いものを破棄しました。",
+            "error": "翻訳: {message}",
+            "workerError": "ワーカーエラー: {message}",
+            "unhandledRejection": "未処理の Promise 拒否: {message}",
+            "unknownWorkerError": "不明なワーカーエラー"
+        },
+        "error": {
+            "released": "翻訳: 解放済み",
+            "workerFailed": "翻訳ワーカーでエラーが発生しました",
+            "notRunning": "翻訳ワーカーが実行されていません"
+        }
+    },
+    "nl": {
+        "placeholder": {
+            "target": "対象の単語",
+            "replacement": "置換後の単語"
+        },
+        "arrow": "→",
+        "remove": "✕",
+        "deleteEntry": "項目を削除",
+        "log": {
+            "enabledTool": "自然言語ツール: ツール \"{name}\" を有効にしました。",
+            "disabledTool": "自然言語ツール: ツール \"{name}\" を無効にしました。",
+            "enabledOnly": "自然言語ツール: {names} のみを有効にしました。"
+        },
+        "error": {
+            "parseFailed": "自然言語ツール: {label} のツール定義が有効な JSON ではありません — {message}",
+            "definitionsInvalid": "自然言語ツール: ツール定義が有効な JSON ではありません — {message}",
+            "disabledToolNotFound": "自然言語ツール: 無効化対象のツール \"{name}\" が見つかりません。",
+            "liveToolNotFound": "自然言語ツール: 実行中のツール \"{name}\" が見つかりません。"
+        }
+    },
+    "ui": {
+        "section": {
+            "wsConnection": "WebSocket接続",
+            "microphone": "マイク",
+            "settings": "設定",
+            "wordReplacement": "単語置換",
+            "streamConfiguration": "ストリーム設定",
+            "translation": "翻訳",
+            "naturalLanguageTools": "自然言語ツール",
+            "documentation": "ドキュメント",
+            "status": "ステータス"
+        },
+        "settings": {
+            "voiceRecognitionModel": "音声認識モデル：",
+            "advancedSettings": "詳細設定",
+            "sendEvents": {
+                "label": "イベントを送信",
+                "description": "<code>[eventName]</code> フレームを送信します。詳細は下記の「イベント」を参照してください。"
+            },
+            "removePunctuation": {
+                "label": "句読点を削除",
+                "description": "送信前に、文字、数字、スペースのみを残し、すべて小文字に変換します。"
+            },
+            "streamedOutput": {
+                "label": "ストリーミング出力",
+                "description": "話し終わるのを待たずに、認識されたテキストを逐次送信します。"
+            },
+            "enableCommands": {
+                "label": "コマンドを有効化",
+                "description": "コマンドを送信することで、WebSocketリレーからこのブリッジを制御できるようにします。詳細は下記の「コマンド」を参照してください。"
+            },
+            "wordReplacement": {
+                "label": "単語置換",
+                "description": "WebSocket経由で送信する前に、単語を指定した置換語に置き換えます。置換リストは下のパネルで管理できます。"
+            },
+            "streamConfiguration": {
+                "label": "ストリーム設定",
+                "description": "認識されたテキストのコピーを追加の独立したストリームとして送信します。下のパネルで設定できます。"
+            },
+            "naturalLanguageToolCalling": {
+                "label": "自然言語によるツール呼び出し",
+                "description": "ウェイクワードで始まる認識テキストをNeedle\u00a03エンジンで処理し、ツール呼び出しフレームを出力します。下のパネルで設定できます。"
+            }
+        },
+        "cards": {
+            "wordReplacement": {
+                "description": "音声テキスト内で対象の単語が出現するたびに、送信前に指定した置換語に置き換えます。大文字と小文字は区別せずに照合し、置換後の単語は一致した単語の大文字・小文字の形式に合わせます。"
+            },
+            "streamConfiguration": {
+                "description": "有効になっている各ストリームは、認識されたテキストのコピーをそれぞれ送信します。<strong>デフォルトストリーム</strong>はそのまま送信され、「句読点を削除」の設定に従います。<strong>オリジナルストリーム</strong>は、モデルからのテキストをそのまま送信し、先頭に<code>[stream.orig]</code>を付加します。「句読点を削除」の設定は無視されます。<strong>正規化ストリーム</strong>は、句読点を削除したテキストを送信します（設定にかかわらず常に削除されます）。先頭には<code>[stream.norm]</code>を付加します。<strong>翻訳ストリーム</strong>は、下の翻訳パネルで選択した方向に応じて、テキストの機械翻訳を送信し、先頭に<code>[stream.trans.JP]</code>または<code>[stream.trans.EN]</code>を付加します。",
+                "defaultStream": {
+                    "label": "デフォルトストリーム",
+                    "description": "プレフィックスのないストリーム。デフォルトで出力される内容です。"
+                },
+                "originalStream": {
+                    "label": "オリジナルストリーム",
+                    "description": "モデルからの生テキストを変換せずに送信するストリームです。先頭に<code>[stream.orig]</code>を付加します。"
+                },
+                "normalizedStream": {
+                    "label": "正規化ストリーム",
+                    "description": "句読点を削除したテキストを送信するストリームです。先頭に<code>[stream.norm]</code>を付加します。"
+                },
+                "translationStream": {
+                    "label": "翻訳ストリーム",
+                    "description": "テキストの機械翻訳を送信するストリームです。翻訳方向に応じて、先頭に<code>[stream.trans.JP]</code>（英語 → 日本語）または<code>[stream.trans.EN]</code>（日本語 → 英語）を付加します。下のパネルで設定できます。"
+                }
+            },
+            "translation": {
+                "description": "翻訳ストリームは、OPUS-MTモデルを使用して、認識されたテキストをブラウザー内でローカルに翻訳します（Transformers.jsによってワーカー内で実行されます）。モデルはデスクトップクライアントによってキャッシュフォルダーにダウンロードされ、そこから提供されます。そのため、翻訳中にインターネットからデータが取得されることはありません。また、下の翻訳方向が「無効」に設定されている間は何も実行されません。",
+                "direction": "翻訳方向",
+                "directionDescription": "英語 → 日本語の出力には<code>[stream.trans.JP]</code>が付加され、日本語 → 英語の出力には<code>[stream.trans.EN]</code>が付加されます。選択した方向のモデルは、初回使用時に読み込まれます。",
+                "directionOptions": {
+                    "off": "無効",
+                    "enJp": "英語 → 日本語",
+                    "jpEn": "日本語 → 英語"
+                }
+            },
+            "naturalLanguageTools": {
+                "description": "ウェイクワードで始まる認識テキストは、下記のツール定義とともにNeedle\u00a03モデルで処理されます。モデルはデスクトップクライアントのキャッシュフォルダーにダウンロードされ、そこから提供されます。成功した各ツール呼び出しは、<code>[tool.sep]TOOL_NAME\u00a0<var>GS</var>\u00a0KEY=VALUE\u00a0<var>RS</var>\u00a0KEY2=VALUE</code>の形式で出力されます。GS/RSは、それぞれグループ区切り文字とレコード区切り文字の制御文字です。文字起こしテキストは通常どおりストリーミング出力されます。",
+                "fields": {
+                    "wakeWord": {
+                        "label": "ウェイクワード",
+                        "placeholder": "hey bridge",
+                        "description": "ツール処理を開始するために認識する単語です。この単語で始まらないメッセージは無視されます。"
+                    },
+                    "tools": {
+                        "label": "ツール",
+                        "aria": "ツール定義",
+                        "description": "ツール定義ブロック（OpenAI形式の関数スキーマ）を格納したJSON配列です。"
+                    },
+                    "disabledTools": {
+                        "label": "無効なツール",
+                        "aria": "無効なツール定義",
+                        "description": "無効化され、モデルに送信されないツール定義です。<code>naturalLanguageToolsDisableTool</code> / <code>naturalLanguageToolsEnableTool</code>コマンドを使用して、ツールをこのリストとの間で移動できます。"
+                    },
+                    "confidence": {
+                        "label": "信頼度しきい値",
+                        "description": "0から1までの数値です。このしきい値を下回る出力はログに記録されますが、ツール呼び出しは出力されません。"
+                    }
+                }
+            }
+        },
+        "doc": {
+            "events": {
+                "summary": "イベント",
+                "items": {
+                    "speechEnded": "ユーザーが発話を終了したときに送信されます。",
+                    "enabled": "文字起こしが有効になったときに送信されます。",
+                    "disabled": "文字起こしが無効になったときに送信されます。",
+                    "removePunctuationEnabled": "句読点の削除機能が有効になったときに送信されます。",
+                    "removePunctuationDisabled": "句読点の削除機能が無効になったときに送信されます。",
+                    "outputStreamingEnabled": "出力ストリーミング機能が有効になったときに送信されます。",
+                    "outputStreamingDisabled": "出力ストリーミング機能が無効になったときに送信されます。",
+                    "replacementEnabled": "単語置換機能が有効になったときに送信されます。",
+                    "replacementDisabled": "単語置換機能が無効になったときに送信されます。",
+                    "naturalLanguageToolsEnabled": "自然言語によるツール呼び出し機能が有効になったときに送信されます。",
+                    "naturalLanguageToolsDisabled": "自然言語によるツール呼び出し機能が無効になったときに送信されます。",
+                    "translationEnabled": "翻訳機能が有効になったときに送信されます。",
+                    "translationDisabled": "翻訳機能が無効になったときに送信されます。"
+                }
+            },
+            "commands": {
+                "summary": "コマンド",
+                "hint": "WebSocketリレー経由で受信する、ブリッジの動作を変更するメッセージです。「コマンドを有効にする」設定がオンの場合にのみ適用されます。",
+                "items": {
+                    "toggle": "マイクのオンとオフを切り替えます。",
+                    "enable": "文字起こしを有効にします（必要に応じてマイクを起動し、それ以外の場合は音声フレームの送信を再開します）。",
+                    "disable": "文字起こしを無効にします（マイクは起動したままですが、次に有効にするまで音声フレームは送信されません）。",
+                    "removePunctuationToggle": "句読点の削除のオンとオフを切り替えます。",
+                    "removePunctuationEnable": "句読点の削除を有効にします。",
+                    "removePunctuationDisable": "句読点の削除を無効にします。",
+                    "outputStreamingToggle": "出力ストリーミングのオンとオフを切り替えます。",
+                    "outputStreamingEnable": "出力ストリーミングを有効にします。",
+                    "outputStreamingDisable": "出力ストリーミングを無効にします。",
+                    "replacementToggle": "単語置換のオンとオフを切り替えます。",
+                    "replacementEnable": "単語置換を有効にします。",
+                    "replacementDisable": "単語置換を無効にします。",
+                    "naturalLanguageToolsToggle": "自然言語によるツール呼び出しのオンとオフを切り替えます。",
+                    "naturalLanguageToolsEnable": "自然言語によるツール呼び出しを有効にします。",
+                    "naturalLanguageToolsDisable": "自然言語によるツール呼び出しを無効にします。",
+                    "naturalLanguageToolsDisableTool": "指定された名前のツールを無効にします。",
+                    "naturalLanguageToolsEnableTool": "指定された名前のツールを再び有効にします。",
+                    "naturalLanguageToolsEnableOnlyTools": "指定されたツールのみを有効にし、指定されていないすべてのツールを無効にします。",
+                    "translationToggle": "翻訳ストリームのオンとオフを切り替えます。",
+                    "translationEnable": "翻訳ストリームを有効にします。",
+                    "translationDisable": "翻訳ストリームを無効にします。",
+                    "translationDirection": "翻訳方向を設定します（EN → JP、JP → EN、または無効）。"
+                }
+            }
+        }
+    }
+}

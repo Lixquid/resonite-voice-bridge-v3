@@ -42,7 +42,7 @@
 
       <section>
         <h2>
-          WebSocket connection
+          <span data-i18n="ui.section.wsConnection">WebSocket connection</span>
           <span class="ws-state ws-state--closed" id="wsState">— disconnected</span>
         </h2>
         <div class="conn">
@@ -87,7 +87,7 @@
       </dialog>
 
       <section>
-        <h2>Microphone</h2>
+        <h2 data-i18n="ui.section.microphone">Microphone</h2>
         <div class="mic-row">
           <button id="mic" class="mic" type="button" disabled aria-label="Start listening">
             <svg class="mic__mic" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -109,59 +109,59 @@
       </section>
 
       <section>
-        <h2>Settings</h2>
-        <div class="label">Voice Recognition Model:</div>
+        <h2 data-i18n="ui.section.settings">Settings</h2>
+        <div class="label" data-i18n="ui.settings.voiceRecognitionModel">Voice Recognition Model:</div>
         <div class="chips" id="archChips" role="group" aria-label="Model size"></div>
         <label class="opt opt--first">
           <input type="checkbox" id="sendEvents" checked />
-          <span>Send Events
-            <small class="opt-sub">Send <code>[eventName]</code> frames. See &quot;Events&quot; below for details.</small>
+          <span><span data-i18n="ui.settings.sendEvents.label">Send Events</span>
+            <small class="opt-sub" data-i18n-html="ui.settings.sendEvents.description">Send <code>[eventName]</code> frames. See &quot;Events&quot; below for details.</small>
           </span>
         </label>
         <label class="opt">
           <input type="checkbox" id="sanitize" />
-          <span>Remove Punctuation
-            <small class="opt-sub">Keep only letters, numbers, and spaces, and lowercase everything before sending.</small>
+          <span><span data-i18n="ui.settings.removePunctuation.label">Remove Punctuation</span>
+            <small class="opt-sub" data-i18n="ui.settings.removePunctuation.description">Keep only letters, numbers, and spaces, and lowercase everything before sending.</small>
           </span>
         </label>
         <label class="opt">
           <input type="checkbox" id="streamedOutput" checked />
-          <span>Streamed Output
-            <small class="opt-sub">Send text as it's recognized, instead of when you stop talking.</small>
+          <span><span data-i18n="ui.settings.streamedOutput.label">Streamed Output</span>
+            <small class="opt-sub" data-i18n="ui.settings.streamedOutput.description">Send text as it's recognized, instead of when you stop talking.</small>
           </span>
         </label>
         <label class="opt">
           <input type="checkbox" id="enableCommands" checked />
-          <span>Enable Commands
-            <small class="opt-sub">Let the WebSocket relay control this bridge by sending commands. See &quot;Commands&quot; below for details.</small>
+          <span><span data-i18n="ui.settings.enableCommands.label">Enable Commands</span>
+            <small class="opt-sub" data-i18n-html="ui.settings.enableCommands.description">Let the WebSocket relay control this bridge by sending commands. See &quot;Commands&quot; below for details.</small>
           </span>
         </label>
         <label class="opt">
           <input type="checkbox" id="wordReplacement" />
-          <span>Word Replacement
-            <small class="opt-sub">Swap words for replacements before they are sent over the WebSocket. Manage the list in the panel below.</small>
+          <span><span data-i18n="ui.settings.wordReplacement.label">Word Replacement</span>
+            <small class="opt-sub" data-i18n="ui.settings.wordReplacement.description">Swap words for replacements before they are sent over the WebSocket. Manage the list in the panel below.</small>
           </span>
         </label>
         <details class="adv" id="advancedSettings">
-          <summary>Advanced Settings</summary>
+          <summary data-i18n="ui.settings.advancedSettings">Advanced Settings</summary>
           <label class="opt">
             <input type="checkbox" id="streamConfig" />
-            <span>Stream Configuration
-              <small class="opt-sub">Send additional copies of the recognized text as separate streams. Configure them in the panel below.</small>
+            <span><span data-i18n="ui.settings.streamConfiguration.label">Stream Configuration</span>
+              <small class="opt-sub" data-i18n="ui.settings.streamConfiguration.description">Send additional copies of the recognized text as separate streams. Configure them in the panel below.</small>
             </span>
           </label>
           <label class="opt">
             <input type="checkbox" id="nlTools" />
-            <span>Natural Language Tool Calling
-              <small class="opt-sub">Run recognized text that starts with the wake word through the Needle&nbsp;3 engine and emit tool call frames. Configure it in the panel below.</small>
+            <span><span data-i18n="ui.settings.naturalLanguageToolCalling.label">Natural Language Tool Calling</span>
+              <small class="opt-sub" data-i18n-html="ui.settings.naturalLanguageToolCalling.description">Run recognized text that starts with the wake word through the Needle&nbsp;3 engine and emit tool call frames. Configure it in the panel below.</small>
             </span>
           </label>
         </details>
       </section>
 
       <section id="wrPanel" hidden>
-        <h2>Word Replacement</h2>
-        <p class="wr-hint">
+        <h2 data-i18n="ui.section.wordReplacement">Word Replacement</h2>
+        <p class="wr-hint" data-i18n="ui.cards.wordReplacement.description">
           Every occurrence of a target word in the voice text is replaced with
           its replacement before sending. Matching ignores case; the
           replacement follows the case of the matched word.
@@ -171,8 +171,8 @@
       </section>
 
       <section id="streamPanel" hidden>
-        <h2>Stream Configuration</h2>
-        <p class="panel-hint">
+        <h2 data-i18n="ui.section.streamConfiguration">Stream Configuration</h2>
+        <p class="panel-hint" data-i18n-html="ui.cards.streamConfiguration.description">
           Each enabled stream sends its own copy of the recognized text.
           The <strong>Default Stream</strong> is sent as-is and respects
           &quot;Remove Punctuation&quot;. The <strong>Original Stream</strong> sends the text
@@ -186,33 +186,33 @@
         </p>
         <label class="opt">
           <input type="checkbox" id="streamDefault" checked />
-          <span>Default Stream
-            <small class="opt-sub">The stream with no prefix — what is emitted by default.</small>
+          <span><span data-i18n="ui.cards.streamConfiguration.defaultStream.label">Default Stream</span>
+            <small class="opt-sub" data-i18n="ui.cards.streamConfiguration.defaultStream.description">The stream with no prefix — what is emitted by default.</small>
           </span>
         </label>
         <label class="opt opt--sub">
           <input type="checkbox" id="streamOriginal" />
-          <span>Original Stream
-            <small class="opt-sub">The model's raw text, untransformed, prefixed with <code>[stream.orig]</code>.</small>
+          <span><span data-i18n="ui.cards.streamConfiguration.originalStream.label">Original Stream</span>
+            <small class="opt-sub" data-i18n-html="ui.cards.streamConfiguration.originalStream.description">The model's raw text, untransformed, prefixed with <code>[stream.orig]</code>.</small>
           </span>
         </label>
         <label class="opt opt--sub">
           <input type="checkbox" id="streamNormalized" />
-          <span>Normalized Stream
-            <small class="opt-sub">The text with punctuation removed, prefixed with <code>[stream.norm]</code>.</small>
+          <span><span data-i18n="ui.cards.streamConfiguration.normalizedStream.label">Normalized Stream</span>
+            <small class="opt-sub" data-i18n-html="ui.cards.streamConfiguration.normalizedStream.description">The text with punctuation removed, prefixed with <code>[stream.norm]</code>.</small>
           </span>
         </label>
         <label class="opt opt--sub">
           <input type="checkbox" id="streamTranslation" />
-          <span>Translation Stream
-            <small class="opt-sub">A machine translation of the text, prefixed with <code>[stream.trans.JP]</code> (EN → JP) or <code>[stream.trans.EN]</code> (JP → EN). Configure it in the panel below.</small>
+          <span><span data-i18n="ui.cards.streamConfiguration.translationStream.label">Translation Stream</span>
+            <small class="opt-sub" data-i18n-html="ui.cards.streamConfiguration.translationStream.description">A machine translation of the text, prefixed with <code>[stream.trans.JP]</code> (EN → JP) or <code>[stream.trans.EN]</code> (JP → EN). Configure it in the panel below.</small>
           </span>
         </label>
       </section>
 
       <section id="translationPanel" hidden>
-        <h2>Translation</h2>
-        <p class="panel-hint">
+        <h2 data-i18n="ui.section.translation">Translation</h2>
+        <p class="panel-hint" data-i18n="ui.cards.translation.description">
           The Translation Stream translates the recognized text locally in the
           browser with OPUS-MT models (run by Transformers.js in a worker).
           The models are downloaded by the desktop client into its cache
@@ -221,20 +221,20 @@
           set to Disabled.
         </p>
         <div class="nl-field">
-          <label for="translationDirection">Translation Direction</label>
+          <label for="translationDirection" data-i18n="ui.cards.translation.direction">Translation Direction</label>
           <select id="translationDirection">
-            <option value="off">Disabled</option>
-            <option value="en-jp">English → Japanese</option>
-            <option value="jp-en">Japanese → English</option>
+            <option value="off" data-i18n="ui.cards.translation.directionOptions.off">Disabled</option>
+            <option value="en-jp" data-i18n="ui.cards.translation.directionOptions.enJp">English → Japanese</option>
+            <option value="jp-en" data-i18n="ui.cards.translation.directionOptions.jpEn">Japanese → English</option>
           </select>
-          <small class="nl-sub">EN → JP output goes out as <code>[stream.trans.JP]</code>; JP → EN output as <code>[stream.trans.EN]</code>. The model for the chosen direction is loaded on first use.</small>
+          <small class="nl-sub" data-i18n-html="ui.cards.translation.directionDescription">EN → JP output goes out as <code>[stream.trans.JP]</code>; JP → EN output as <code>[stream.trans.EN]</code>. The model for the chosen direction is loaded on first use.</small>
         </div>
         <p class="nl-status" id="translationStatus"></p>
       </section>
 
       <section id="nlToolsPanel" hidden>
-        <h2>Natural Language Tools</h2>
-        <p class="panel-hint">
+        <h2 data-i18n="ui.section.naturalLanguageTools">Natural Language Tools</h2>
+        <p class="panel-hint" data-i18n-html="ui.cards.naturalLanguageTools.description">
           Recognized text that starts with the wake word is run through the
           Needle&nbsp;3 model (downloaded into the desktop client's cache
           folder and served from there) together with the tool
@@ -244,80 +244,80 @@
           Transcribed text keeps streaming as usual.
         </p>
         <div class="nl-field">
-          <label for="nlWakeWord">Wake Word</label>
-          <input id="nlWakeWord" type="text" spellcheck="false" placeholder="hey bridge" />
-          <small class="nl-sub">The word to listen for to start tool processing. Messages that don't start with it are ignored.</small>
+          <label for="nlWakeWord" data-i18n="ui.cards.naturalLanguageTools.fields.wakeWord.label">Wake Word</label>
+          <input id="nlWakeWord" type="text" spellcheck="false" placeholder="hey bridge" data-i18n-placeholder="ui.cards.naturalLanguageTools.fields.wakeWord.placeholder" />
+          <small class="nl-sub" data-i18n="ui.cards.naturalLanguageTools.fields.wakeWord.description">The word to listen for to start tool processing. Messages that don't start with it are ignored.</small>
         </div>
         <div class="nl-field">
-          <label for="nlToolsText">Tools</label>
-          <textarea id="nlToolsText" rows="10" spellcheck="false" aria-label="Tool definitions"></textarea>
-          <small class="nl-sub">A JSON array of tool definition blocks (OpenAI-style function schemas).</small>
+          <label for="nlToolsText" data-i18n="ui.cards.naturalLanguageTools.fields.tools.label">Tools</label>
+          <textarea id="nlToolsText" rows="10" spellcheck="false" aria-label="Tool definitions" data-i18n-aria="ui.cards.naturalLanguageTools.fields.tools.aria"></textarea>
+          <small class="nl-sub" data-i18n="ui.cards.naturalLanguageTools.fields.tools.description">A JSON array of tool definition blocks (OpenAI-style function schemas).</small>
         </div>
         <div class="nl-field" id="nlDisabledToolsField" hidden>
-          <label for="nlDisabledToolsText">Disabled Tools</label>
-          <textarea id="nlDisabledToolsText" rows="10" spellcheck="false" aria-label="Disabled tool definitions"></textarea>
-          <small class="nl-sub">Tool definitions that are disabled and not sent to the model. Tools are moved here and back with the <code>naturalLanguageToolsDisableTool</code> / <code>naturalLanguageToolsEnableTool</code> commands.</small>
+          <label for="nlDisabledToolsText" data-i18n="ui.cards.naturalLanguageTools.fields.disabledTools.label">Disabled Tools</label>
+          <textarea id="nlDisabledToolsText" rows="10" spellcheck="false" aria-label="Disabled tool definitions" data-i18n-aria="ui.cards.naturalLanguageTools.fields.disabledTools.aria"></textarea>
+          <small class="nl-sub" data-i18n-html="ui.cards.naturalLanguageTools.fields.disabledTools.description">Tool definitions that are disabled and not sent to the model. Tools are moved here and back with the <code>naturalLanguageToolsDisableTool</code> / <code>naturalLanguageToolsEnableTool</code> commands.</small>
         </div>
         <div class="nl-field">
-          <label for="nlConfidence">Confidence Threshold</label>
+          <label for="nlConfidence" data-i18n="ui.cards.naturalLanguageTools.fields.confidence.label">Confidence Threshold</label>
           <input id="nlConfidence" type="number" min="0" max="1" step="0.01" value="0.5" />
-          <small class="nl-sub">A number from 0 to 1. Outputs below this threshold are logged but don't emit tool calls.</small>
+          <small class="nl-sub" data-i18n="ui.cards.naturalLanguageTools.fields.confidence.description">A number from 0 to 1. Outputs below this threshold are logged but don't emit tool calls.</small>
         </div>
         <p class="nl-status" id="nlStatus"></p>
       </section>
 
       <section>
-        <h2>Documentation</h2>
+        <h2 data-i18n="ui.section.documentation">Documentation</h2>
         <details class="doc" id="doc-events">
-          <summary>Events</summary>
+          <summary data-i18n="ui.doc.events.summary">Events</summary>
           <ul>
-            <li><button type="button" class="doc-event-btn" data-event="[speechEnded]">[speechEnded]</button> - Sent whenever the user stops speaking.</li>
-            <li><button type="button" class="doc-event-btn" data-event="[enabled]">[enabled]</button> - Sent when transcription has been enabled.</li>
-            <li><button type="button" class="doc-event-btn" data-event="[disabled]">[disabled]</button> - Sent when transcription has been disabled.</li>
-            <li><button type="button" class="doc-event-btn" data-event="[removePunctuationEnabled]">[removePunctuationEnabled]</button> - Sent when the punctuation removal feature has been enabled.</li>
-            <li><button type="button" class="doc-event-btn" data-event="[removePunctuationDisabled]">[removePunctuationDisabled]</button> - Sent when the punctuation removal feature has been disabled.</li>
-            <li><button type="button" class="doc-event-btn" data-event="[outputStreamingEnabled]">[outputStreamingEnabled]</button> - Sent when the output streaming feature has been enabled.</li>
-            <li><button type="button" class="doc-event-btn" data-event="[outputStreamingDisabled]">[outputStreamingDisabled]</button> - Sent when the output streaming feature has been disabled.</li>
-            <li><button type="button" class="doc-event-btn" data-event="[replacementEnabled]">[replacementEnabled]</button> - Sent when the word replacement feature has been enabled.</li>
-            <li><button type="button" class="doc-event-btn" data-event="[replacementDisabled]">[replacementDisabled]</button> - Sent when the word replacement feature has been disabled.</li>
-            <li><button type="button" class="doc-event-btn" data-event="[naturalLanguageToolsEnabled]">[naturalLanguageToolsEnabled]</button> - Sent when the natural language tool calling feature has been enabled.</li>
-            <li><button type="button" class="doc-event-btn" data-event="[naturalLanguageToolsDisabled]">[naturalLanguageToolsDisabled]</button> - Sent when the natural language tool calling feature has been disabled.</li>
-            <li><button type="button" class="doc-event-btn" data-event="[translationEnabled]">[translationEnabled]</button> - Sent when the translation feature has been enabled.</li>
-            <li><button type="button" class="doc-event-btn" data-event="[translationDisabled]">[translationDisabled]</button> - Sent when the translation feature has been disabled.</li>
+            <li><button type="button" class="doc-event-btn" data-event="[speechEnded]">[speechEnded]</button> - <span data-i18n="ui.doc.events.items.speechEnded">Sent whenever the user stops speaking.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="[enabled]">[enabled]</button> - <span data-i18n="ui.doc.events.items.enabled">Sent when transcription has been enabled.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="[disabled]">[disabled]</button> - <span data-i18n="ui.doc.events.items.disabled">Sent when transcription has been disabled.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="[removePunctuationEnabled]">[removePunctuationEnabled]</button> - <span data-i18n="ui.doc.events.items.removePunctuationEnabled">Sent when the punctuation removal feature has been enabled.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="[removePunctuationDisabled]">[removePunctuationDisabled]</button> - <span data-i18n="ui.doc.events.items.removePunctuationDisabled">Sent when the punctuation removal feature has been disabled.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="[outputStreamingEnabled]">[outputStreamingEnabled]</button> - <span data-i18n="ui.doc.events.items.outputStreamingEnabled">Sent when the output streaming feature has been enabled.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="[outputStreamingDisabled]">[outputStreamingDisabled]</button> - <span data-i18n="ui.doc.events.items.outputStreamingDisabled">Sent when the output streaming feature has been disabled.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="[replacementEnabled]">[replacementEnabled]</button> - <span data-i18n="ui.doc.events.items.replacementEnabled">Sent when the word replacement feature has been enabled.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="[replacementDisabled]">[replacementDisabled]</button> - <span data-i18n="ui.doc.events.items.replacementDisabled">Sent when the word replacement feature has been disabled.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="[naturalLanguageToolsEnabled]">[naturalLanguageToolsEnabled]</button> - <span data-i18n="ui.doc.events.items.naturalLanguageToolsEnabled">Sent when the natural language tool calling feature has been enabled.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="[naturalLanguageToolsDisabled]">[naturalLanguageToolsDisabled]</button> - <span data-i18n="ui.doc.events.items.naturalLanguageToolsDisabled">Sent when the natural language tool calling feature has been disabled.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="[translationEnabled]">[translationEnabled]</button> - <span data-i18n="ui.doc.events.items.translationEnabled">Sent when the translation feature has been enabled.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="[translationDisabled]">[translationDisabled]</button> - <span data-i18n="ui.doc.events.items.translationDisabled">Sent when the translation feature has been disabled.</span></li>
           </ul>
         </details>
         <details class="doc" id="doc-commands">
-          <summary>Commands</summary>
-          <p class="doc-hint">Incoming messages over the WebSocket relay that change how the bridge functions. Only honored while the "Enable Commands" setting is on.</p>
+          <summary data-i18n="ui.doc.commands.summary">Commands</summary>
+          <p class="doc-hint" data-i18n="ui.doc.commands.hint">Incoming messages over the WebSocket relay that change how the bridge functions. Only honored while the "Enable Commands" setting is on.</p>
           <ul>
-            <li><button type="button" class="doc-event-btn" data-event="toggle">toggle</button> - Toggles the microphone on and off.</li>
-            <li><button type="button" class="doc-event-btn" data-event="enable">enable</button> - Enables transcription (starts the microphone if needed, otherwise resumes sending frames).</li>
-            <li><button type="button" class="doc-event-btn" data-event="disable">disable</button> - Disables transcription (the microphone stays live; no frames are sent until the next enable).</li>
-            <li><button type="button" class="doc-event-btn" data-event="removePunctuationToggle">removePunctuationToggle</button> - Toggles the punctuation removal on and off.</li>
-            <li><button type="button" class="doc-event-btn" data-event="removePunctuationEnable">removePunctuationEnable</button> - Enables the punctuation removal.</li>
-            <li><button type="button" class="doc-event-btn" data-event="removePunctuationDisable">removePunctuationDisable</button> - Disables the punctuation removal.</li>
-            <li><button type="button" class="doc-event-btn" data-event="outputStreamingToggle">outputStreamingToggle</button> - Toggles the output streaming on and off.</li>
-            <li><button type="button" class="doc-event-btn" data-event="outputStreamingEnable">outputStreamingEnable</button> - Enables the output streaming.</li>
-            <li><button type="button" class="doc-event-btn" data-event="outputStreamingDisable">outputStreamingDisable</button> - Disables the output streaming.</li>
-            <li><button type="button" class="doc-event-btn" data-event="replacementToggle">replacementToggle</button> - Toggles the word replacement on and off.</li>
-            <li><button type="button" class="doc-event-btn" data-event="replacementEnable">replacementEnable</button> - Enables the word replacement.</li>
-            <li><button type="button" class="doc-event-btn" data-event="replacementDisable">replacementDisable</button> - Disables the word replacement.</li>
-            <li><button type="button" class="doc-event-btn" data-event="naturalLanguageToolsToggle">naturalLanguageToolsToggle</button> - Toggles the natural language tool calling on and off.</li>
-            <li><button type="button" class="doc-event-btn" data-event="naturalLanguageToolsEnable">naturalLanguageToolsEnable</button> - Enables the natural language tool calling.</li>
-            <li><button type="button" class="doc-event-btn" data-event="naturalLanguageToolsDisable">naturalLanguageToolsDisable</button> - Disables the natural language tool calling.</li>
-            <li><button type="button" class="doc-event-btn" data-event="naturalLanguageToolsDisableTool=TOOL_NAME">naturalLanguageToolsDisableTool=TOOL_NAME</button> - Disables the specific tool with the given name.</li>
-            <li><button type="button" class="doc-event-btn" data-event="naturalLanguageToolsEnableTool=TOOL_NAME">naturalLanguageToolsEnableTool=TOOL_NAME</button> - Re-enables the specific tool with the given name.</li>
-            <li><button type="button" class="doc-event-btn" data-event="naturalLanguageToolsEnableOnlyTools=TOOL_NAME,TOOL_NAME2">naturalLanguageToolsEnableOnlyTools=TOOL_NAME,TOOL_NAME2</button> - Enables the given tools, and disables all tools not mentioned.</li>
-            <li><button type="button" class="doc-event-btn" data-event="translationToggle">translationToggle</button> - Toggles the Translation Stream on and off.</li>
-            <li><button type="button" class="doc-event-btn" data-event="translationEnable">translationEnable</button> - Enables the Translation Stream.</li>
-            <li><button type="button" class="doc-event-btn" data-event="translationDisable">translationDisable</button> - Disables the Translation Stream.</li>
-            <li><button type="button" class="doc-event-btn" data-event="translationDirection=EN_JP|JP_EN|OFF">translationDirection=EN_JP|JP_EN|OFF</button> - Sets the translation direction (EN → JP, JP → EN, or disabled).</li>
+            <li><button type="button" class="doc-event-btn" data-event="toggle">toggle</button> - <span data-i18n="ui.doc.commands.items.toggle">Toggles the microphone on and off.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="enable">enable</button> - <span data-i18n="ui.doc.commands.items.enable">Enables transcription (starts the microphone if needed, otherwise resumes sending frames).</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="disable">disable</button> - <span data-i18n="ui.doc.commands.items.disable">Disables transcription (the microphone stays live; no frames are sent until the next enable).</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="removePunctuationToggle">removePunctuationToggle</button> - <span data-i18n="ui.doc.commands.items.removePunctuationToggle">Toggles the punctuation removal on and off.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="removePunctuationEnable">removePunctuationEnable</button> - <span data-i18n="ui.doc.commands.items.removePunctuationEnable">Enables the punctuation removal.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="removePunctuationDisable">removePunctuationDisable</button> - <span data-i18n="ui.doc.commands.items.removePunctuationDisable">Disables the punctuation removal.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="outputStreamingToggle">outputStreamingToggle</button> - <span data-i18n="ui.doc.commands.items.outputStreamingToggle">Toggles the output streaming on and off.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="outputStreamingEnable">outputStreamingEnable</button> - <span data-i18n="ui.doc.commands.items.outputStreamingEnable">Enables the output streaming.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="outputStreamingDisable">outputStreamingDisable</button> - <span data-i18n="ui.doc.commands.items.outputStreamingDisable">Disables the output streaming.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="replacementToggle">replacementToggle</button> - <span data-i18n="ui.doc.commands.items.replacementToggle">Toggles the word replacement on and off.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="replacementEnable">replacementEnable</button> - <span data-i18n="ui.doc.commands.items.replacementEnable">Enables the word replacement.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="replacementDisable">replacementDisable</button> - <span data-i18n="ui.doc.commands.items.replacementDisable">Disables the word replacement.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="naturalLanguageToolsToggle">naturalLanguageToolsToggle</button> - <span data-i18n="ui.doc.commands.items.naturalLanguageToolsToggle">Toggles the natural language tool calling on and off.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="naturalLanguageToolsEnable">naturalLanguageToolsEnable</button> - <span data-i18n="ui.doc.commands.items.naturalLanguageToolsEnable">Enables the natural language tool calling.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="naturalLanguageToolsDisable">naturalLanguageToolsDisable</button> - <span data-i18n="ui.doc.commands.items.naturalLanguageToolsDisable">Disables the natural language tool calling.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="naturalLanguageToolsDisableTool=TOOL_NAME">naturalLanguageToolsDisableTool=TOOL_NAME</button> - <span data-i18n="ui.doc.commands.items.naturalLanguageToolsDisableTool">Disables the specific tool with the given name.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="naturalLanguageToolsEnableTool=TOOL_NAME">naturalLanguageToolsEnableTool=TOOL_NAME</button> - <span data-i18n="ui.doc.commands.items.naturalLanguageToolsEnableTool">Re-enables the specific tool with the given name.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="naturalLanguageToolsEnableOnlyTools=TOOL_NAME,TOOL_NAME2">naturalLanguageToolsEnableOnlyTools=TOOL_NAME,TOOL_NAME2</button> - <span data-i18n="ui.doc.commands.items.naturalLanguageToolsEnableOnlyTools">Enables the given tools, and disables all tools not mentioned.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="translationToggle">translationToggle</button> - <span data-i18n="ui.doc.commands.items.translationToggle">Toggles the Translation Stream on and off.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="translationEnable">translationEnable</button> - <span data-i18n="ui.doc.commands.items.translationEnable">Enables the Translation Stream.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="translationDisable">translationDisable</button> - <span data-i18n="ui.doc.commands.items.translationDisable">Disables the Translation Stream.</span></li>
+            <li><button type="button" class="doc-event-btn" data-event="translationDirection=EN_JP|JP_EN|OFF">translationDirection=EN_JP|JP_EN|OFF</button> - <span data-i18n="ui.doc.commands.items.translationDirection">Sets the translation direction (EN → JP, JP → EN, or disabled).</span></li>
           </ul>
         </details>
       </section>
 
       <section>
-        <h2>Status</h2>
+        <h2 data-i18n="ui.section.status">Status</h2>
         <div class="frames" id="frames"></div>
       </section>
 

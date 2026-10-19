@@ -11,7 +11,7 @@
  * never blocks the transcription UI.
  */
 
-import { t, workerLocale } from './i18n';
+import { getWorkerLocale, t } from './i18n';
 
 /**
  * Base URL for the Needle 3 engine and model. The desktop client downloads
@@ -46,8 +46,9 @@ export interface NeedleResult {
  * module, the model blob, and exposes load/init/reset/complete over
  * postMessage.
  */
-const WORKER_SOURCE = [
-  `const L = ${JSON.stringify(workerLocale.needle)};`,
+function workerSource(): string {
+  return [
+  `const L = ${JSON.stringify(getWorkerLocale().needle)};`,
   'function fmt(s, p) { for (var k in p) { s = s.split("{" + k + "}").join(p[k]); } return s; }',
   'var mod = null, outPtr = 0;',
   'function cstr(s) { var b = new TextEncoder().encode(s), p = mod._malloc(b.length + 1); mod.HEAPU8.set(b, p); mod.HEAPU8[p + b.length] = 0; return p; }',
@@ -97,7 +98,8 @@ const WORKER_SOURCE = [
   '    self.postMessage({ id: m.id, result: result });',
   '  } catch (err) { self.postMessage({ id: m.id, error: String(err && err.message || err) }); }',
   '};',
-].join('\n');
+  ].join('\n');
+}
 
 let engineWorker: Worker | null = null;
 let rpcSeq = 0;
@@ -141,7 +143,7 @@ async function ensureEngineLoaded(onStatus?: (message: string) => void): Promise
 }
 
 function startWorker(): void {
-  engineWorker = new Worker(URL.createObjectURL(new Blob([WORKER_SOURCE], { type: 'text/javascript' })));
+  engineWorker = new Worker(URL.createObjectURL(new Blob([workerSource()], { type: 'text/javascript' })));
   engineWorker.onmessage = (event: MessageEvent) => {
     const m = event.data as { id?: number; type?: string; got?: number; total?: number; result?: unknown; error?: string };
     if (m.type === 'progress') {
