@@ -719,11 +719,108 @@ const els = {
   archChips: byId<HTMLElement>('archChips'),
   live: byId<HTMLElement>('live'),
   frames: byId<HTMLElement>('frames'),
+  localeButton: byId<HTMLButtonElement>('localeButton'),
+  localeMenu: byId<HTMLElement>('localeMenu'),
+  localeFlag: byId<HTMLElement>('localeFlag'),
 };
 
 // The settings gear is only shown when the localStorage flag
 // `showSuperAdvancedSettings` is set to the string "true".
 els.settings.hidden = localStorage.getItem('showSuperAdvancedSettings') !== 'true';
+
+// --- Locale selector -------------------------------------------------------------
+
+/** Locales the selector supports: English and Japanese. */
+type Locale = 'en' | 'jp';
+const LOCALES: readonly Locale[] = ['en', 'jp'];
+/** Flag markup per locale, shown in the header button (SVG for consistency). */
+const LOCALE_FLAGS: Record<Locale, string> = {
+  en:
+    '<svg viewBox="0 0 20 14" aria-hidden="true">' +
+    '<rect width="20" height="14" fill="#fff"/>' +
+    '<path d="M0 0h20v1.1H0zm0 2.1h20v1.1H0zm0 2.1h20v1.1H0zm0 2.1h20v1.1H0zm0 2.1h20v1.1H0zm0 2.1h20v1.1H0zm0 2.1h20v1.1H0z" fill="#b22234"/>' +
+    '<path d="M0 12.9h20V14H0z" fill="#b22234"/>' +
+    '<rect width="8" height="7.4" fill="#3c3b6e"/>' +
+    '</svg>',
+  jp:
+    '<svg viewBox="0 0 20 14" aria-hidden="true">' +
+    '<rect width="20" height="14" fill="#fff"/>' +
+    '<circle cx="10" cy="7" r="3.5" fill="#bc002d"/>' +
+    '</svg>',
+};
+/** The currently active locale. */
+let locale: Locale = (() => {
+  const stored = localStorage.getItem('appLocale');
+  if (stored && (LOCALES as readonly string[]).includes(stored)) return stored as Locale;
+  // Fall back to the document language, then to English.
+  return document.documentElement.lang === 'jp' ? 'jp' : 'en';
+})();
+
+/** Renders the active locale into the button flag and menu selection. */
+function renderLocale(): void {
+  els.localeFlag.innerHTML = LOCALE_FLAGS[locale];
+  for (const item of els.localeMenu.querySelectorAll<HTMLButtonElement>('.locale-item')) {
+    item.setAttribute('aria-selected', String(item.dataset.locale === locale));
+  }
+}
+
+/** Sets the active locale, persists it, and updates the UI. */
+function setLocale(next: Locale): void {
+  if (next === locale) {
+    closeLocaleMenu();
+    return;
+  }
+  locale = next;
+  localStorage.setItem('appLocale', next);
+  document.documentElement.lang = next;
+  renderLocale();
+  closeLocaleMenu();
+}
+
+function closeLocaleMenu(): void {
+  if (els.localeMenu.matches(':popover-open')) els.localeMenu.hidePopover();
+}
+
+// The invoker button toggles the popover natively (popovertarget). Only the
+// item selection needs a listener here.
+els.localeMenu.addEventListener('click', (e) => {
+  const item = (e.target as HTMLElement).closest<HTMLButtonElement>('.locale-item');
+  if (item) setLocale(item.dataset.locale as Locale);
+});
+
+// Keep aria-expanded in sync with the popover's open state — it covers both
+// invoker toggling and native light-dismiss (outside click, Escape).
+
+// Browsers without CSS anchor positioning center popovers in the viewport;
+// position the menu under the button manually in that case.
+const supportsAnchorPositioning = CSS.supports('anchor-name: --test');
+
+function positionLocaleMenu(): void {
+  const btn = els.localeButton.getBoundingClientRect();
+  const menu = els.localeMenu.getBoundingClientRect();
+  const left = Math.min(
+    Math.max(8, btn.right - menu.width),
+    window.innerWidth - menu.width - 8,
+  );
+  els.localeMenu.style.margin = '0';
+  els.localeMenu.style.left = `${left}px`;
+  els.localeMenu.style.top = `${btn.bottom + 6}px`;
+}
+
+els.localeMenu.addEventListener('toggle', () => {
+  const open = els.localeMenu.matches(':popover-open');
+  els.localeButton.setAttribute('aria-expanded', String(open));
+  if (open && !supportsAnchorPositioning) positionLocaleMenu();
+});
+
+window.addEventListener('resize', () => {
+  if (els.localeMenu.matches(':popover-open') && !supportsAnchorPositioning) {
+    positionLocaleMenu();
+  }
+});
+
+// Initial render: reflect the persisted (or default) locale.
+renderLocale();
 
 // --- WebSocket relay -------------------------------------------------------------
 

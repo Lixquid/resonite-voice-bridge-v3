@@ -13,7 +13,25 @@
   <body data-state="idle">
     <main>
       <header>
-        <h1><img class="logo" src="/icon.svg" alt="" />Resonite Voice Bridge <span class="version">%VERSION%</span></h1>
+        <div class="header-top">
+          <h1><img class="logo" src="/icon.svg" alt="" />Resonite Voice Bridge <span class="version">%VERSION%</span></h1>
+          <div class="locale-selector" id="localeSelector">
+            <button id="localeButton" class="btn locale-btn" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Select language" popovertarget="localeMenu">
+              <span class="locale-flag" id="localeFlag"></span>
+              <svg class="locale-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+            </button>
+            <div class="locale-menu" id="localeMenu" popover>
+              <button class="locale-item" type="button" data-locale="en" role="option" aria-selected="true">
+                <span class="locale-flag locale-flag--en"><svg viewBox="0 0 20 14" aria-hidden="true"><rect width="20" height="14" fill="#fff"/><path d="M0 0h20v1.1H0zm0 2.1h20v1.1H0zm0 2.1h20v1.1H0zm0 2.1h20v1.1H0zm0 2.1h20v1.1H0zm0 2.1h20v1.1H0zm0 2.1h20v1.1H0z" fill="#b22234"/><path d="M0 12.9h20V14H0z" fill="#b22234"/><rect width="8" height="7.4" fill="#3c3b6e"/></svg></span>
+                <span class="locale-name">EN</span>
+              </button>
+              <button class="locale-item" type="button" data-locale="jp" role="option" aria-selected="false">
+                <span class="locale-flag locale-flag--jp"><svg viewBox="0 0 20 14" aria-hidden="true"><rect width="20" height="14" fill="#fff"/><circle cx="10" cy="7" r="3.5" fill="#bc002d"/></svg></span>
+                <span class="locale-name">JP</span>
+              </button>
+            </div>
+          </div>
+        </div>
         <p>
           Live speech-to-text with the Moonshine model, running entirely in this
           browser. In-progress sentences stream over the WebSocket as they grow;

@@ -66,6 +66,113 @@ header .version {
   vertical-align: middle;
 }
 
+/* --- Locale selector (header, top right) ------------------------------ */
+
+/* Title line: the h1 on the left, the locale selector on the right. */
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.locale-selector {
+  position: relative;
+  flex: none;
+}
+
+.locale-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.55rem;
+  /* Anchor target for the popover menu (see .locale-menu). */
+  anchor-name: --locale-btn;
+}
+
+.locale-btn[aria-expanded="true"] {
+  border-color: var(--accent);
+  background: rgba(110, 168, 254, 0.12);
+}
+
+.locale-caret {
+  width: 0.9rem;
+  height: 0.9rem;
+  color: var(--muted);
+  transition: transform 120ms ease;
+}
+
+.locale-btn[aria-expanded="true"] .locale-caret {
+  transform: rotate(180deg);
+}
+
+/* Flag tile: shared by the button and the menu entries. */
+.locale-flag {
+  display: inline-flex;
+  width: 1.4rem;
+  height: 1rem;
+  overflow: hidden;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px var(--line);
+  flex: none;
+}
+
+.locale-flag svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Plain popover: the browser shows/hides it in the top layer and light-dismisses
+   it natively — only cosmetics are styled here. Items stack as blocks. */
+.locale-menu {
+  min-width: 9rem;
+  padding: 0.3rem;
+  /* Anchor the menu under the button's bottom-right corner instead of the
+     browser's default centered popover position. */
+  position: fixed;
+  left: anchor(--locale-btn right);
+  top: anchor(--locale-btn bottom);
+  margin: 0.35rem 0 0;
+  translate: -100% 0;
+  max-height: calc(100vh - anchor(--locale-btn bottom) - 0.5rem);
+  overflow: auto;
+  /* Opaque background: translucent --panel-strong would let page content show
+     through, since the popover renders in the top layer above the page. */
+  background: rgb(9, 11, 15);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.locale-item + .locale-item {
+  margin-top: 0.15rem;
+}
+
+.locale-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  font-size: 0.9rem;
+  text-align: left;
+  transition: background 120ms ease;
+}
+
+.locale-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.locale-item[aria-selected="true"] {
+  background: rgba(110, 168, 254, 0.15);
+  color: var(--accent);
+}
+
 section {
   border: 1px solid var(--line);
   border-radius: var(--radius);
