@@ -10,9 +10,9 @@ import (
 func TestSettingsRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 
-	// A missing file must yield the defaults.
-	if got := loadSettings(path); got.AutoStart {
-		t.Errorf("loadSettings on missing file: AutoStart = true, want false")
+	// A missing file must yield the defaults (AutoStart is true by default).
+	if got := loadSettings(path); !got.AutoStart {
+		t.Errorf("loadSettings on missing file: AutoStart = false, want true")
 	}
 
 	// Saving and loading again must reproduce the written value.
@@ -39,8 +39,8 @@ func TestLoadSettingsBrokenFile(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	// A corrupted file must fall back to the defaults, not panic or fail.
-	if got := loadSettings(path); got.AutoStart {
-		t.Errorf("loadSettings on broken file: AutoStart = true, want false")
+	if got := loadSettings(path); !got.AutoStart {
+		t.Errorf("loadSettings on broken file: AutoStart = false, want true")
 	}
 	// The defaults must also be written back, so what is on disk matches
 	// what the UI shows before the user toggles anything.
@@ -52,7 +52,7 @@ func TestLoadSettingsBrokenFile(t *testing.T) {
 	if err := json.Unmarshal(data, &got); err != nil {
 		t.Fatalf("reset file is not valid JSON (%v): %q", err, data)
 	}
-	if got.AutoStart {
-		t.Errorf("reset file: AutoStart = true, want false")
+	if !got.AutoStart {
+		t.Errorf("reset file: AutoStart = false, want true")
 	}
 }

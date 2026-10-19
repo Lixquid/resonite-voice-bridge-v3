@@ -802,6 +802,15 @@ body[data-state="listening"] .mic__stop {
   font-style: italic;
 }
 
+.frame--loading .msg {
+  color: var(--faint);
+  font-style: italic;
+}
+
+.frame--loading {
+  opacity: 0.6;
+}
+
 .frame--cmd .msg {
   color: var(--accent);
   font-weight: 600;

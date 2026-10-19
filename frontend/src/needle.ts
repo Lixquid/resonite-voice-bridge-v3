@@ -47,9 +47,25 @@ export interface NeedleResult {
 const WORKER_SOURCE = [
   'var mod = null, outPtr = 0;',
   'function cstr(s) { var b = new TextEncoder().encode(s), p = mod._malloc(b.length + 1); mod.HEAPU8.set(b, p); mod.HEAPU8[p + b.length] = 0; return p; }',
+  // The desktop client downloads the engine and model into its cache in the
+  // background after startup (see systray/modelcache.go), so a 404 or failed
+  // request usually means "not downloaded yet". Retries absorb that window:
+  // up to 30 rounds two seconds apart (~1 minute), giving up only afterwards.
+  'function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }',
+  'async function fetchWithRetry(url) {',
+  '  var lastErr = null;',
+  '  for (var attempt = 1; attempt <= 30; attempt++) {',
+  '    if (attempt > 1) await sleep(2000);',
+  '    try {',
+  '      var r = await fetch(url);',
+  '      if (r.ok) return r;',
+  '      lastErr = new Error("HTTP " + r.status);',
+  '    } catch (err) { lastErr = err; }',
+  '  }',
+  '  throw new Error("download failed (" + (lastErr && lastErr.message || lastErr) + "): " + url);',
+  '}',
   'async function fetchBytes(url, onProgress) {',
-  '  var r = await fetch(url);',
-  '  if (!r.ok) throw new Error("download failed (" + r.status + "): " + url);',
+  '  var r = await fetchWithRetry(url);',
   '  if (!r.body || !onProgress) return new Uint8Array(await r.arrayBuffer());',
   '  var total = Number(r.headers.get("Content-Length")) || 0, reader = r.body.getReader(), chunks = [], got = 0;',
   '  for (;;) { var step = await reader.read(); if (step.done) break; chunks.push(step.value); got += step.value.length; onProgress(got, total); }',
@@ -61,8 +77,7 @@ const WORKER_SOURCE = [
   '  var m = e.data, result = null;',
   '  try {',
   '    if (m.type === "load") {',
-  '      var r = await fetch(m.base + "/wasm/needle.js");',
-  '      if (!r.ok) throw new Error("download failed (" + r.status + "): " + m.base + "/wasm/needle.js");',
+  '      var r = await fetchWithRetry(m.base + "/wasm/needle.js");',
   '      importScripts(URL.createObjectURL(new Blob([await r.text()], { type: "text/javascript" })));',
   '      var wasm = fetchBytes(m.base + "/wasm/needle.wasm");',
   '      var cact = fetchBytes(m.base + "/" + m.blob, function (got, total) { self.postMessage({ type: "progress", got: got, total: total }); });',
@@ -88,6 +103,10 @@ let loadedTools: string | null = null;
 let queue: Promise<unknown> = Promise.resolve();
 /** Progress reporting callback, set per run and cleared afterwards. */
 let onProgress: ((got: number, total: number) => void) | null = null;
+/** Minimum delay between download status emissions, so the log stays readable. */
+const DOWNLOAD_STATUS_INTERVAL_MS = 3000;
+/** Timestamp of the last emitted download status, for throttling. */
+let lastDownloadStatus = 0;
 
 /** Formats the model download progress message. */
 function downloadStatus(got: number, total: number): string {
@@ -99,7 +118,13 @@ function downloadStatus(got: number, total: number): string {
 
 /** Installs the progress-reporting callback for the current queued operation. */
 function trackDownload(onStatus?: (message: string) => void): void {
-  onProgress = (got, total) => onStatus?.(downloadStatus(got, total));
+  lastDownloadStatus = 0;
+  onProgress = (got, total) => {
+    const now = Date.now();
+    if (got !== total && now - lastDownloadStatus < DOWNLOAD_STATUS_INTERVAL_MS) return;
+    lastDownloadStatus = now;
+    onStatus?.(downloadStatus(got, total));
+  };
 }
 
 /** Starts the worker and downloads the engine + model blob if not yet loaded. */

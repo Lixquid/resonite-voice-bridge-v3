@@ -26,6 +26,7 @@ const listenPort = "6789"
 
 func main() {
 	showVersion := flag.Bool("version", false, "print the embedded version and exit")
+	clearCacheFlag := flag.Bool("clear-cache", false, "delete the per-user model cache before starting, forcing a re-download of all models")
 	flag.Parse()
 
 	if *showVersion {
@@ -34,6 +35,13 @@ func main() {
 	}
 
 	log.Printf("Resonite Voice Bridge %s", appVersion())
+
+	// Wipe the model cache when asked, before the background warm-up starts,
+	// so every model is re-downloaded from scratch (e.g. after a corrupt or
+	// outdated cache).
+	if *clearCacheFlag {
+		clearCache()
+	}
 
 	// Download the large models (small/medium Moonshine, Needle 3) into the
 	// cache folder in the background, so they are served from disk the next

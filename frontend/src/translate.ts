@@ -67,9 +67,30 @@ let lib = null;
 const pipes = new Map();
 const loads = new Map();
 
+// The desktop client downloads the translation assets into its cache on
+// demand, when the frontend first requests them (see systray/modelcache.go),
+// so a failed request usually means the download itself hiccuped. Retrying a
+// few times with a pause between attempts absorbs that instead of failing the
+// whole stream.
+const LOAD_ATTEMPTS = 5;
+const LOAD_RETRY_DELAY_MS = 3000;
+
+async function retryLoad(fn) {
+  let lastErr = null;
+  for (let attempt = 1; attempt <= LOAD_ATTEMPTS; attempt++) {
+    if (attempt > 1) await new Promise((r) => setTimeout(r, LOAD_RETRY_DELAY_MS));
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr;
+}
+
 async function getLib(base) {
   if (lib) return lib;
-  const mod = await import(base + '/lib/transformers.min.js');
+  const mod = await retryLoad(() => import(base + '/lib/transformers.min.js'));
   // Everything must come from the desktop client: no Hugging Face or CDN
   // access is allowed at inference time.
   mod.env.allowLocalModels = true;
@@ -88,13 +109,13 @@ async function getPipe(dir, base) {
   if (inFlight) return inFlight;
   const promise = (async () => {
     const mod = await getLib(base);
-    const pipe = await mod.pipeline('translation', DIRECTIONS[dir], {
+    const pipe = await retryLoad(() => mod.pipeline('translation', DIRECTIONS[dir], {
       dtype: 'q8',
       progress_callback: (p) => self.postMessage({
         type: 'progress', dir: dir, status: p.status, file: p.file,
         loaded: p.loaded, total: p.total,
       }),
-    });
+    }));
     pipes.set(dir, pipe);
     loads.delete(dir);
     return pipe;
@@ -155,6 +176,10 @@ let rpcSeq = 0;
 const rpcPending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
 /** Status reporter for the operation currently in flight (see {@link pump}). */
 let onProgress: ((message: string) => void) | null = null;
+/** Minimum delay between download status emissions, so the log stays readable. */
+const DOWNLOAD_STATUS_INTERVAL_MS = 3000;
+/** Timestamp of the last emitted download status, for throttling. */
+let lastDownloadStatus = 0;
 /** Error whose message marks an intentional release (not worth logging). */
 const RELEASED = 'Translation: released';
 
@@ -317,6 +342,9 @@ function ensureWorker(): void {
       return;
     }
     if (m.type === 'progress') {
+      const now = Date.now();
+      if (now - lastDownloadStatus < DOWNLOAD_STATUS_INTERVAL_MS) return;
+      lastDownloadStatus = now;
       const dir = m.dir === 'jp-en' ? 'jp-en' : 'en-jp';
       const label = directionLabel(dir);
       if (typeof m.total === 'number' && m.total > 0 && typeof m.loaded === 'number') {

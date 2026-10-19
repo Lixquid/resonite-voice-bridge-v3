@@ -19,7 +19,7 @@ import {
 // --- Types ---------------------------------------------------------------------
 
 type WsState = 'closed' | 'connecting' | 'open';
-type FrameKind = 'partial' | 'final' | 'pause' | 'sys' | 'error' | 'cmd' | 'tool';
+type FrameKind = 'partial' | 'final' | 'pause' | 'sys' | 'error' | 'loading' | 'cmd' | 'tool';
 type ArchKey = 'tiny' | 'small' | 'medium';
 /** Base URLs for the models that are not bundled with the app. */
 type ModelUrls = Record<Exclude<ArchKey, 'tiny'>, string>;
@@ -356,6 +356,7 @@ function translationStreamPrefix(): string | null {
 /** Sets the Translation panel status line (model downloads, errors). */
 function setTranslationStatus(text: string): void {
   els.translationStatus.textContent = text;
+  if (text) logEvent(text, 'loading');
 }
 
 /**
@@ -416,6 +417,7 @@ function updateNlToolsPanel(): void {
 /** Sets the Natural Language Tools panel status line (progress, errors). */
 function setNlStatus(text: string): void {
   els.nlStatus.textContent = text;
+  if (text) logEvent(text, 'loading');
 }
 
 /** Binds a text input or textarea to a persisted string preference. */
@@ -856,7 +858,7 @@ function logFrame(kind: FrameKind, text: string): void {
 }
 
 /** Logs a lifecycle event (WebSocket, model, binding) to the STATUS panel. */
-function logEvent(text: string, kind: 'sys' | 'error' = 'sys'): void {
+function logEvent(text: string, kind: 'sys' | 'error' | 'loading' = 'sys'): void {
   logFrame(kind, text);
 }
 
@@ -1448,37 +1450,84 @@ function modelSources(key: ArchKey): { local: string; remote?: string } {
   return { local: `/models/${key}_streaming`, remote: loadModelUrls()[key] };
 }
 
+/** Resolves after `ms` milliseconds. */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * HEAD-probes one local model file, reporting whether the server actually has
+ * it. The probe checks the content type because SPA dev servers answer 200
+ * with index.html for unknown paths rather than a 404.
+ */
+async function probeLocalFile(url: string): Promise<boolean> {
+  try {
+    const response = await fetch(url, { method: 'HEAD' });
+    if (!response.ok) return false;
+    const type = response.headers.get('content-type') ?? '';
+    return !type.includes('text/html');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Model probing retry budget: the desktop client downloads the models into
+ * its cache in the background after startup (see systray/modelcache.go), so
+ * a missing file usually means "not downloaded yet" rather than "will never
+ * be served". Probing re-runs until every file is found; a round that finds
+ * no new file counts against the budget, and any progress resets it — so a
+ * slow download is waited out for as long as it is actually moving.
+ */
+const PROBE_INTERVAL_MS = 2_000;
+const PROBE_MAX_STALLED_ROUNDS = 30; // ~1 minute of probing without any new file
+
 /**
  * Decides where each model file comes from: probes the local /models/ path
- * first (streaming models only), falling back to the configured base URL for
- * any file the server does not have. Mixing is fine — the loader just wants a
- * URL per canonical filename.
+ * first (streaming models only, retrying while the server is still
+ * downloading), falling back to the configured base URL for any file the
+ * server never gets. Mixing is fine — the loader just wants a URL per
+ * canonical filename.
  */
 async function resolveModelUrls(key: ArchKey): Promise<Record<string, string>> {
   const { local, remote } = modelSources(key);
   const localUrls = Object.fromEntries(MODEL_FILES.map((name) => [name, `${local}/${name}`]));
   if (!remote) return localUrls; // bundled model: all local
 
-  // Probe each file on the local path; use the remote base for misses. The
-  // probe checks the content type because SPA dev servers answer 200 with
-  // index.html for unknown paths rather than a 404.
-  const probes = await Promise.all(
-    MODEL_FILES.map(async (name) => {
-      try {
-        const response = await fetch(`${local}/${name}`, { method: 'HEAD' });
-        if (!response.ok) return false;
-        const type = response.headers.get('content-type') ?? '';
-        return !type.includes('text/html');
-      } catch {
-        return false;
-      }
-    }),
-  );
+  // Probe every file on the local path, re-probing the misses until they all
+  // show up or the retry budget runs out. The first round runs immediately;
+  // every later round waits one interval, so a fully-cached model is served
+  // with zero added latency.
+  const missing = new Set<string>(MODEL_FILES);
+  let found = 0;
+  let stalls = 0; // consecutive rounds that discovered no new file
+  while (missing.size > 0 && stalls <= PROBE_MAX_STALLED_ROUNDS) {
+    if (stalls > 0 || found > 0) await sleep(PROBE_INTERVAL_MS);
+    const before = found;
+    for (const name of [...missing]) {
+      if (await probeLocalFile(`${local}/${name}`)) missing.delete(name);
+    }
+    found = MODEL_FILES.length - missing.size;
+    if (missing.size === 0) break;
+    if (found > before) {
+      stalls = 0;
+      logEvent(
+        `Model ${key}: ${found}/${MODEL_FILES.length} files on the server — waiting for the rest…`,
+      );
+      setStatus(
+        `Waiting for the ${key} model to finish downloading (${found}/${MODEL_FILES.length} files)…`,
+        'info',
+      );
+    } else {
+      stalls++;
+    }
+  }
+
   const result = { ...localUrls };
-  MODEL_FILES.forEach((name, i) => {
-    if (!probes[i]) result[name] = `${remote}/${name}`;
+  missing.forEach((name) => {
+    result[name] = `${remote}/${name}`;
   });
-  const localCount = probes.filter(Boolean).length;
+  const localCount = MODEL_FILES.length - missing.size;
   if (localCount === MODEL_FILES.length) {
     logEvent(`Model ${key}: loading from ${local} (all files local).`);
   } else if (localCount === 0) {

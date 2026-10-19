@@ -283,6 +283,21 @@ func setCacheDirForTest(dir string) {
 	testCacheDir = dir
 }
 
+// clearCache deletes the whole per-user model cache folder (and recreates it
+// empty), so warmModelCache re-downloads everything from scratch. Used by the
+// --clear-cache flag to recover from corrupt or outdated cached files.
+func clearCache() {
+	if err := os.RemoveAll(cacheDir()); err != nil {
+		log.Printf("Model cache: cannot clear %s: %v", cacheDir(), err)
+		return
+	}
+	if err := os.MkdirAll(cacheDir(), 0o755); err != nil {
+		log.Printf("Model cache: cannot recreate %s: %v", cacheDir(), err)
+		return
+	}
+	log.Printf("Model cache cleared: %s", cacheDir())
+}
+
 // warmModelCache downloads every missing cache file, one group per goroutine
 // (models within a group sequentially, groups in parallel). Failures are
 // logged and retried on the next start; serving continues with whatever is

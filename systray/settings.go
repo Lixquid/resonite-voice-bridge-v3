@@ -28,20 +28,23 @@ func settingsPath() (string, error) {
 	return filepath.Join(dir, "resonite-voice-bridge", "settings.json"), nil
 }
 
-// loadSettings reads the settings file, falling back to the zero settings
-// (everything off) when the file does not exist or cannot be parsed. A
-// broken file is never fatal: the user simply gets the defaults, and the
-// file is immediately rewritten with them, so the on-disk state always
-// matches what the menu shows before the user toggles anything.
+// loadSettings reads the settings file, falling back to the default settings
+// when the file does not exist or cannot be parsed. A broken file is never
+// fatal: the user simply gets the defaults, and the file is immediately
+// rewritten with them, so the on-disk state always matches what the menu
+// shows before the user toggles anything.
 func loadSettings(path string) settings {
-	var s settings
+	// AutoStart is enabled by default so the web interface is opened in the
+	// browser on a fresh install without requiring any configuration.
+	s := settings{AutoStart: true}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return s
 	}
 	if err := json.Unmarshal(data, &s); err != nil {
 		log.Printf("Ignoring unreadable settings file %s: %v", path, err)
-		s = settings{}
+		// Reset s to the defaults before rewriting it to disk.
+		s = settings{AutoStart: true}
 		if err := saveSettings(path, s); err != nil {
 			log.Printf("Resetting settings file %s: %v", path, err)
 		}
