@@ -34,6 +34,17 @@
         </div>
       </header>
 
+      <section id="welcomePanel">
+        <h2 data-i18n="ui.cards.welcome.title">Welcome!</h2>
+        <p class="panel-hint" data-i18n="ui.cards.welcome.description">Welcome to Resonite Voice Bridge! What would you like to do?</p>
+        <div class="welcome-buttons" id="welcomeButtons" role="group" data-i18n-aria="ui.cards.welcome.buttons.groupAria">
+          <button type="button" class="btn welcome-btn" data-welcome="transcription" aria-pressed="false" data-i18n="ui.cards.welcome.buttons.transcription">Just Transcription</button>
+          <button type="button" class="btn welcome-btn" data-welcome="en-jp" aria-pressed="false" data-i18n-html="ui.cards.welcome.buttons.enJp">🇬🇧 → 🇯🇵</button>
+          <button type="button" class="btn welcome-btn" data-welcome="jp-en" aria-pressed="false" data-i18n-html="ui.cards.welcome.buttons.jpEn">🇯🇵 → 🇬🇧</button>
+        </div>
+        <button type="button" class="btn welcome-btn welcome-btn--all" id="welcomeAll" data-welcome="all" aria-pressed="false" data-i18n="ui.cards.welcome.buttons.showEverything">Show me everything</button>
+      </section>
+
       <section>
         <h2>
           <span data-i18n="ui.section.wsConnection">WebSocket connection</span>
@@ -102,7 +113,7 @@
         <div class="live" id="live" aria-live="polite"></div>
       </section>
 
-      <section>
+      <section id="settingsPanel">
         <h2 data-i18n="ui.section.settings">Settings</h2>
         <div class="label" data-i18n="ui.settings.voiceRecognitionModel">Voice Recognition Model:</div>
         <div class="chips" id="archChips" role="group" aria-label="Model size"></div>

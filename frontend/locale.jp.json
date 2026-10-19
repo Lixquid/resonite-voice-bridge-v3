@@ -182,6 +182,17 @@
             }
         },
         "cards": {
+            "welcome": {
+                "title": "ようこそ！",
+                "description": "Resonite Voice Bridge へようこそ！何をしますか？",
+                "buttons": {
+                    "groupAria": "ようこそ画面の選択肢",
+                    "transcription": "文字起こしのみ",
+                    "enJp": "<span class=\"welcome-flag\">🇬🇧</span> → <span class=\"welcome-flag\">🇯🇵</span>",
+                    "jpEn": "<span class=\"welcome-flag\">🇯🇵</span> → <span class=\"welcome-flag\">🇬🇧</span>",
+                    "showEverything": "すべて表示"
+                }
+            },
             "wordReplacement": {
                 "description": "音声テキスト内で対象の単語が出現するたびに、送信前に指定した置換語に置き換えます。大文字と小文字は区別せずに照合し、置換後の単語は一致した単語の大文字・小文字の形式に合わせます。"
             },

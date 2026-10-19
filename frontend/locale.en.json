@@ -176,6 +176,17 @@
             }
         },
         "cards": {
+            "welcome": {
+                "title": "Welcome!",
+                "description": "Welcome to Resonite Voice Bridge! What would you like to do?",
+                "buttons": {
+                    "groupAria": "Welcome options",
+                    "transcription": "Just Transcription",
+                    "enJp": "<span class=\"welcome-flag\">🇬🇧</span> → <span class=\"welcome-flag\">🇯🇵</span>",
+                    "jpEn": "<span class=\"welcome-flag\">🇯🇵</span> → <span class=\"welcome-flag\">🇬🇧</span>",
+                    "showEverything": "Show me everything"
+                }
+            },
             "wordReplacement": {
                 "description": "Every occurrence of a target word in the voice text is replaced with its replacement before sending. Matching ignores case; the replacement follows the case of the matched word."
             },

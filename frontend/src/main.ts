@@ -48,6 +48,11 @@ type SanitizeMode = 'default' | 'raw' | 'normalize';
  * direction and with it the prefixed stream the output goes out on.
  */
 type TranslationSetting = 'off' | EngineDirection;
+/**
+ * One of the welcome card's mutually exclusive choices: the three large
+ * buttons each apply a settings preset, "all" shows everything.
+ */
+type WelcomeChoice = 'transcription' | 'en-jp' | 'jp-en' | 'all';
 
 // --- Constants -------------------------------------------------------------------
 
@@ -166,6 +171,8 @@ const DEFAULT_CONFIDENCE = 0.5;
 const MODEL_KEY = 'modelArch';
 /** Persisted base URLs for the models not shipped with the app. */
 const MODEL_URL_KEY = 'modelUrls';
+/** Persisted welcome card choice ({@link WelcomeChoice}). */
+const WELCOME_KEY = 'welcomeChoice';
 
 /**
  * Default download locations for the models that do not ship with the app:
@@ -313,22 +320,18 @@ function renderReplacements(): void {
   els.wrList.replaceChildren(...loadReplacements().map(buildReplacementRow));
 }
 
-/** Shows the panel only while the toggle is on. */
-function updateWordReplacementPanel(): void {
-  els.wrPanel.hidden = !els.wordReplacement.checked;
-}
-
 /**
- * Shows the Stream Configuration panel only while the setting is on. When it
- * turns off, the prefixed streams' deduplication state is cleared so a
- * re-enable mid-sentence cannot suppress their next frame.
+ * Reacts to the Stream Configuration toggle: when it turns off, the prefixed
+ * streams' deduplication state is cleared so a re-enable mid-sentence cannot
+ * suppress their next frame. Visibility itself is declarative — derived from
+ * state in {@link updateVisibility} — so nothing is hidden here.
  */
-function updateStreamPanel(): void {
-  els.streamPanel.hidden = !els.streamConfig.checked;
+function onStreamConfigToggled(): void {
   if (!els.streamConfig.checked) {
     lastSent.original = '';
     lastSent.normalized = '';
   }
+  updateVisibility();
 }
 
 /** Reads the persisted translation direction, tolerating unknown values. */
@@ -368,7 +371,6 @@ function setTranslationStatus(text: string): void {
  * must not emit frames.
  */
 function applyTranslationState(announce = true): void {
-  els.translationPanel.hidden = !els.streamTranslation.checked;
   lastSentTranslation = '';
   cancelPartialTranslation();
   setTranslationDirection(translationEngineDirection(), translationHandlers);
@@ -382,6 +384,7 @@ function applyTranslationState(announce = true): void {
 /** Change handler for the Translation Stream toggle. */
 function onTranslationToggled(): void {
   applyTranslationState();
+  updateVisibility();
 }
 
 /**
@@ -406,19 +409,159 @@ function prewarmNeedle(): void {
 }
 
 /**
- * Shows the Natural Language Tools panel only while the setting is on, and
- * prewarms the Needle 3 model whenever it is turned on (including on page
- * load, when the setting was already enabled).
+ * Prewarms the Needle 3 model whenever Natural Language Tool Calling is on
+ * and its card is visible (see {@link showEverything}) — including on page
+ * load, when the setting was already enabled.
  */
-function updateNlToolsPanel(): void {
-  els.nlToolsPanel.hidden = !els.nlTools.checked;
-  if (els.nlTools.checked) prewarmNeedle();
+function prewarmNlTools(): void {
+  if (els.nlTools.checked && showEverything()) prewarmNeedle();
+}
+
+/** Change handler for the Natural Language Tool Calling toggle. */
+function onNlToolsChanged(): void {
+  prewarmNlTools();
+  updateVisibility();
 }
 
 /** Sets the Natural Language Tools panel status line (progress, errors). */
 function setNlStatus(text: string): void {
   els.nlStatus.textContent = text;
   if (text) logEvent(text, 'loading');
+}
+
+// --- Welcome card ----------------------------------------------------------------
+
+/** Reads the persisted welcome choice; null when nothing (valid) is saved. */
+function loadWelcomeChoice(): WelcomeChoice | null {
+  const saved = readStorage(WELCOME_KEY);
+  return saved === 'transcription' || saved === 'en-jp' || saved === 'jp-en' || saved === 'all'
+    ? saved
+    : null;
+}
+
+/**
+ * True when the welcome card's "Show me everything" choice is the active
+ * one. Card visibility is derived from this flag plus the settings
+ * checkboxes in {@link updateVisibility} — the single, declarative source of
+ * truth; no event handler sets `hidden` on the cards itself.
+ */
+function showEverything(): boolean {
+  return loadWelcomeChoice() === 'all';
+}
+
+/**
+ * Computes card visibility from current state — the persisted welcome choice
+ * plus the settings checkboxes — with no stateful hiding anywhere:
+ *
+ * - Settings card: the checkboxes and the Advanced Settings dropdown are
+ *   visible only under "Show me everything"; the voice recognition model
+ *   chips stay visible always.
+ * - Word Replacement: the setting on AND "Show me everything".
+ * - Stream Configuration: the setting on AND "Show me everything".
+ * - Translation: the Stream Configuration setting on AND the Translation
+ *   Stream on AND "Show me everything".
+ * - Natural Language Tools: the setting on AND "Show me everything".
+ *
+ * Runs after every state change that can affect visibility: a welcome
+ * choice (via {@link applyWelcomeChoice}) and each toggle's change event.
+ */
+function updateVisibility(): void {
+  const everything = showEverything();
+  for (const el of els.settingsPanel.querySelectorAll<HTMLElement>('label.opt, details.adv')) {
+    el.hidden = !everything;
+  }
+  els.wrPanel.hidden = !(everything && els.wordReplacement.checked);
+  els.streamPanel.hidden = !(everything && els.streamConfig.checked);
+  els.translationPanel.hidden =
+    !(everything && els.streamConfig.checked && els.streamTranslation.checked);
+  els.nlToolsPanel.hidden = !(everything && els.nlTools.checked);
+}
+
+/**
+ * Sets a checkbox to a value, persists the preference, and fires the change
+ * callback (which sends the corresponding event frame). A no-op when the
+ * state already matches, so re-selecting a preset does not spam the relay.
+ */
+function setCheckbox(
+  input: HTMLInputElement,
+  checked: boolean,
+  key: string,
+  onChange?: () => void,
+): void {
+  if (input.checked === checked) return;
+  input.checked = checked;
+  writeStorage(key, String(checked));
+  onChange?.();
+}
+
+/**
+ * Applies a welcome choice: each preset button writes its toggle
+ * configuration, "all" leaves the settings untouched. `announce` is false
+ * during startup restore, where state changes must not emit event frames.
+ * Card visibility is recomputed declaratively at the end (and the Needle 3
+ * engine prewarmed if Natural Language Tool Calling just became visible).
+ */
+function applyWelcomeChoice(choice: WelcomeChoice, announce: boolean): void {
+  if (choice !== 'all') {
+    setCheckbox(
+      els.sendEvents,
+      choice !== 'transcription',
+      SEND_EVENTS_KEY,
+    );
+    setCheckbox(
+      els.sanitize,
+      false,
+      SANITIZE_KEY,
+      announce ? onRemovePunctuationToggled : undefined,
+    );
+    setCheckbox(
+      els.streamedOutput,
+      true,
+      STREAMED_OUTPUT_KEY,
+      announce ? onOutputStreamingToggled : undefined,
+    );
+    setCheckbox(els.enableCommands, false, ENABLE_COMMANDS_KEY);
+    setCheckbox(
+      els.wordReplacement,
+      false,
+      WORD_REPLACEMENT_KEY,
+      announce ? onWordReplacementToggled : undefined,
+    );
+    setCheckbox(els.streamConfig, choice !== 'transcription', STREAM_CONFIG_KEY);
+    setCheckbox(els.nlTools, false, NL_TOOLS_KEY, announce ? onNlToolsToggled : undefined);
+    if (choice !== 'transcription') {
+      // Translation preset: Default and Translation streams only.
+      setCheckbox(els.streamDefault, true, STREAM_DEFAULT_KEY);
+      setCheckbox(els.streamOriginal, false, STREAM_ORIGINAL_KEY);
+      setCheckbox(els.streamNormalized, false, STREAM_NORMALIZED_KEY);
+      setCheckbox(els.streamTranslation, true, STREAM_TRANSLATION_KEY);
+      els.translationDirection.value = choice;
+      writeStorage(TRANSLATION_DIRECTION_KEY, choice);
+    }
+  }
+  applyTranslationState(announce);
+  updateVisibility();
+}
+
+/** Marks the active welcome button (`.is-active` + aria-pressed). */
+function renderWelcomeSelection(choice: WelcomeChoice | null): void {
+  const buttons = [
+    ...els.welcomeButtons.querySelectorAll<HTMLButtonElement>('.welcome-btn'),
+    els.welcomeAll,
+  ];
+  for (const btn of buttons) {
+    const active = choice !== null && btn.dataset.welcome === choice;
+    btn.classList.toggle('is-active', active);
+    btn.setAttribute('aria-pressed', String(active));
+  }
+}
+
+/** Selects a welcome choice: persists it, applies its preset, updates the UI. */
+function selectWelcome(choice: WelcomeChoice): void {
+  writeStorage(WELCOME_KEY, choice);
+  renderWelcomeSelection(choice);
+  applyWelcomeChoice(choice, true);
+  prewarmNlTools();
 }
 
 /** Binds a text input or textarea to a persisted string preference. */
@@ -703,6 +846,9 @@ const els = {
   translationPanel: byId<HTMLElement>('translationPanel'),
   translationDirection: byId<HTMLSelectElement>('translationDirection'),
   translationStatus: byId<HTMLElement>('translationStatus'),
+  welcomeButtons: byId<HTMLElement>('welcomeButtons'),
+  welcomeAll: byId<HTMLButtonElement>('welcomeAll'),
+  settingsPanel: byId<HTMLElement>('settingsPanel'),
   wrPanel: byId<HTMLElement>('wrPanel'),
   wrList: byId<HTMLElement>('wrList'),
   wrAdd: byId<HTMLButtonElement>('wrAdd'),
@@ -1878,14 +2024,14 @@ els.translationDirection.addEventListener('change', () => {
   writeStorage(TRANSLATION_DIRECTION_KEY, els.translationDirection.value);
   applyTranslationState();
 });
-els.wordReplacement.addEventListener('change', updateWordReplacementPanel);
-els.streamConfig.addEventListener('change', updateStreamPanel);
+els.wordReplacement.addEventListener('change', updateVisibility);
+els.streamConfig.addEventListener('change', onStreamConfigToggled);
 // Natural Language Tool Calling: the toggle shows the panel; each field
 // persists as it is edited. The starter tool block is only used when
 // nothing has been saved yet.
 if (readStorage(NL_TOOLS_TEXT_KEY) === null) els.nlToolsText.value = DEFAULT_TOOL_DEFINITIONS;
 bindCheckbox(els.nlTools, NL_TOOLS_KEY, onNlToolsToggled);
-els.nlTools.addEventListener('change', updateNlToolsPanel);
+els.nlTools.addEventListener('change', onNlToolsChanged);
 bindText(els.nlWakeWord, NL_WAKE_WORD_KEY);
 bindText(els.nlToolsText, NL_TOOLS_TEXT_KEY);
 bindText(els.nlConfidence, NL_CONFIDENCE_KEY);
@@ -1899,21 +2045,36 @@ els.nlDisabledToolsText.addEventListener('input', () => {
   updateDisabledToolsVisibility();
 });
 updateDisabledToolsVisibility();
-updateNlToolsPanel();
 els.wrAdd.addEventListener('click', () => {
   els.wrList.append(buildReplacementRow({ target: '', replacement: '' }));
   onReplacementsChanged();
   els.wrList.lastElementChild?.querySelector<HTMLInputElement>('.wr-target')?.focus();
 });
 renderReplacements();
-updateWordReplacementPanel();
-updateStreamPanel();
 // Translation Stream: restores the saved direction and applies the saved
 // state silently — startup must not emit event frames. When active, the
 // model for the chosen direction is preloaded right away; when off, no
 // model is initialized and nothing is queued (see TRANSLATION.txt).
 els.translationDirection.value = loadTranslationDirection();
 applyTranslationState(false);
+// Welcome card: clicking one button deselects the others; the large buttons
+// apply their presets, "Show me everything" restores the full UI.
+els.welcomeButtons.addEventListener('click', (e) => {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.welcome-btn');
+  if (btn) selectWelcome(btn.dataset.welcome as WelcomeChoice);
+});
+els.welcomeAll.addEventListener('click', () => selectWelcome('all'));
+// The persisted choice is restored — applying its preset silently, since
+// startup must not emit event frames — and the advanced UI is hidden
+// accordingly while a preset button is active.
+const savedWelcomeChoice = loadWelcomeChoice();
+if (savedWelcomeChoice) applyWelcomeChoice(savedWelcomeChoice, false);
+renderWelcomeSelection(savedWelcomeChoice);
+// Card visibility is declarative: derived once here from the persisted
+// welcome choice and the restored checkbox states, and re-derived after
+// every change via the handlers above.
+updateVisibility();
+prewarmNlTools();
 
 // --- Settings dialog -----------------------------------------------------------------
 
