@@ -734,20 +734,10 @@ els.settings.hidden = localStorage.getItem('showSuperAdvancedSettings') !== 'tru
 /** Locales the selector supports: English and Japanese. */
 type Locale = 'en' | 'jp';
 const LOCALES: readonly Locale[] = ['en', 'jp'];
-/** Flag markup per locale, shown in the header button (SVG for consistency). */
+/** Flag emoji per locale, shown in the header button. */
 const LOCALE_FLAGS: Record<Locale, string> = {
-  en:
-    '<svg viewBox="0 0 20 14" aria-hidden="true">' +
-    '<rect width="20" height="14" fill="#fff"/>' +
-    '<path d="M0 0h20v1.1H0zm0 2.1h20v1.1H0zm0 2.1h20v1.1H0zm0 2.1h20v1.1H0zm0 2.1h20v1.1H0zm0 2.1h20v1.1H0zm0 2.1h20v1.1H0z" fill="#b22234"/>' +
-    '<path d="M0 12.9h20V14H0z" fill="#b22234"/>' +
-    '<rect width="8" height="7.4" fill="#3c3b6e"/>' +
-    '</svg>',
-  jp:
-    '<svg viewBox="0 0 20 14" aria-hidden="true">' +
-    '<rect width="20" height="14" fill="#fff"/>' +
-    '<circle cx="10" cy="7" r="3.5" fill="#bc002d"/>' +
-    '</svg>',
+  en: '🇬🇧',
+  jp: '🇯🇵',
 };
 /** The currently active locale. */
 let locale: Locale = (() => {

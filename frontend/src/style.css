@@ -112,16 +112,14 @@ header .version {
   display: inline-flex;
   width: 1.4rem;
   height: 1rem;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  line-height: 1;
   overflow: hidden;
   border-radius: 3px;
   box-shadow: 0 0 0 1px var(--line);
   flex: none;
-}
-
-.locale-flag svg {
-  display: block;
-  width: 100%;
-  height: 100%;
 }
 
 /* Plain popover: the browser shows/hides it in the top layer and light-dismisses
