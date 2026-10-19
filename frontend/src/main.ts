@@ -8,6 +8,7 @@ import {
   type MoonshineModule,
   type TranscriptLine,
 } from './moonshine';
+import { t } from './i18n';
 import './style.css';
 import { needlePrewarm, needleRun, type NeedleCall } from './needle';
 import {
@@ -272,28 +273,28 @@ function buildReplacementRow(entry: WordReplacement): HTMLDivElement {
   const target = document.createElement('input');
   target.type = 'text';
   target.className = 'wr-target';
-  target.placeholder = 'Target word';
-  target.setAttribute('aria-label', 'Target word');
+  target.placeholder = t('nl.placeholder.target');
+  target.setAttribute('aria-label', t('nl.placeholder.target'));
   target.value = entry.target;
 
   const arrow = document.createElement('span');
   arrow.className = 'wr-arrow';
-  arrow.textContent = '→';
+  arrow.textContent = t('nl.arrow');
   arrow.setAttribute('aria-hidden', 'true');
 
   const replacement = document.createElement('input');
   replacement.type = 'text';
   replacement.className = 'wr-replacement';
-  replacement.placeholder = 'Replacement word';
-  replacement.setAttribute('aria-label', 'Replacement word');
+  replacement.placeholder = t('nl.placeholder.replacement');
+  replacement.setAttribute('aria-label', t('nl.placeholder.replacement'));
   replacement.value = entry.replacement;
 
   const remove = document.createElement('button');
   remove.type = 'button';
   remove.className = 'wr-remove';
-  remove.textContent = '✕';
-  remove.setAttribute('aria-label', 'Delete entry');
-  remove.title = 'Delete entry';
+  remove.textContent = t('nl.remove');
+  remove.setAttribute('aria-label', t('nl.deleteEntry'));
+  remove.title = t('nl.deleteEntry');
   remove.addEventListener('click', () => {
     row.remove();
     onReplacementsChanged();
@@ -400,7 +401,7 @@ const translationHandlers = {
 function prewarmNeedle(): void {
   void needlePrewarm(setNlStatus).catch((err) => {
     setNlStatus('');
-    logEvent(`Needle: ${(err as Error).message}`, 'error');
+    logEvent(t('needle.log.error', { message: (err as Error).message }), 'error');
   });
 }
 
@@ -458,10 +459,7 @@ function parseTools(text: string, label: string): ToolDef[] | null {
     if (!Array.isArray(parsed)) throw new Error('not a JSON array');
     return parsed as ToolDef[];
   } catch (err) {
-    logEvent(
-      `Natural Language Tools: ${label} tool definitions are not valid JSON — ${(err as Error).message}`,
-      'error',
-    );
+    logEvent(t('nl.error.parseFailed', { label, message: (err as Error).message }), 'error');
     return null;
   }
 }
@@ -487,7 +485,7 @@ function enableNlTool(name: string): void {
   if (!disabled || !live) return;
   const index = disabled.findIndex((tool) => toolName(tool) === name);
   if (index < 0) {
-    logEvent(`Natural Language Tools: disabled tool "${name}" not found.`, 'error');
+    logEvent(t('nl.error.disabledToolNotFound', { name }), 'error');
     return;
   }
   const [tool] = disabled.splice(index, 1);
@@ -495,7 +493,7 @@ function enableNlTool(name: string): void {
   saveTools(els.nlToolsText, NL_TOOLS_TEXT_KEY, live);
   saveTools(els.nlDisabledToolsText, NL_DISABLED_TOOLS_TEXT_KEY, disabled);
   updateDisabledToolsVisibility();
-  logEvent(`Natural Language Tools: enabled tool "${name}".`);
+  logEvent(t('nl.log.enabledTool', { name }));
 }
 
 /**
@@ -508,7 +506,7 @@ function disableNlTool(name: string): void {
   if (!disabled || !live) return;
   const index = live.findIndex((tool) => toolName(tool) === name);
   if (index < 0) {
-    logEvent(`Natural Language Tools: live tool "${name}" not found.`, 'error');
+    logEvent(t('nl.error.liveToolNotFound', { name }), 'error');
     return;
   }
   const [tool] = live.splice(index, 1);
@@ -516,7 +514,7 @@ function disableNlTool(name: string): void {
   saveTools(els.nlToolsText, NL_TOOLS_TEXT_KEY, live);
   saveTools(els.nlDisabledToolsText, NL_DISABLED_TOOLS_TEXT_KEY, disabled);
   updateDisabledToolsVisibility();
-  logEvent(`Natural Language Tools: disabled tool "${name}".`);
+  logEvent(t('nl.log.disabledTool', { name }));
 }
 
 /**
@@ -542,7 +540,7 @@ function enableOnlyNlTools(names: string[]): void {
   saveTools(els.nlToolsText, NL_TOOLS_TEXT_KEY, [...liveKeep, ...enabled]);
   saveTools(els.nlDisabledToolsText, NL_DISABLED_TOOLS_TEXT_KEY, [...disabledKeep, ...disabledNow]);
   updateDisabledToolsVisibility();
-  logEvent(`Natural Language Tools: enabled only ${names.join(', ')}.`);
+  logEvent(t('nl.log.enabledOnly', { names: names.join(', ') }));
 }
 
 /** Formats one tool call as `name(arg1, arg2)` for the frame log. */
@@ -587,20 +585,23 @@ async function runNlTools(query: string): Promise<void> {
     setNlStatus('');
     const described = result.calls.map(describeNeedleCall).join('; ') || 'nothing';
     if (!result.calls.length) {
-      logEvent(`Needle: no tool calls (confidence ${result.confidence.toFixed(2)}).`);
+      logEvent(t('needle.log.noToolCalls', { confidence: result.confidence.toFixed(2) }));
       return;
     }
     if (!(result.confidence >= threshold)) {
       logEvent(
-        `Needle: confidence ${result.confidence.toFixed(2)} below threshold ` +
-          `${threshold.toFixed(2)} — logged, not emitted: ${described}`,
+        t('needle.log.belowThreshold', {
+          confidence: result.confidence.toFixed(2),
+          threshold: threshold.toFixed(2),
+          described,
+        }),
       );
       return;
     }
     for (const call of result.calls) emitToolCall(call);
   } catch (err) {
     setNlStatus('');
-    logEvent(`Needle: ${(err as Error).message}`, 'error');
+    logEvent(t('needle.log.error', { message: (err as Error).message }), 'error');
   }
 }
 
@@ -670,7 +671,7 @@ function maybeRunTools(text: string): void {
 /** Looks up a required element, failing fast when the markup and script drift apart. */
 function byId<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
-  if (!el) throw new Error(`Missing #${id} — index.html and main.ts are out of sync.`);
+  if (!el) throw new Error(t('error.missingElement', { id }));
   return el as T;
 }
 
@@ -840,15 +841,19 @@ function setWsState(state: WsState): void {
     state === 'open' ? ' dot--open' : state === 'connecting' ? ' dot--connecting' : ''
   }`;
   els.wsToggle.textContent =
-    state === 'open' ? 'Disconnect' : state === 'connecting' ? 'Cancel' : 'Connect';
+    state === 'open'
+      ? t('ws.button.disconnect')
+      : state === 'connecting'
+        ? t('ws.button.cancel')
+        : t('ws.button.connect');
   // Heading suffix, e.g. "WEBSOCKET CONNECTION — CONNECTED", colored by state.
   els.wsState.className = `ws-state ws-state--${state}`;
   els.wsState.textContent =
     state === 'open'
-      ? '— connected'
+      ? t('ws.state.connected')
       : state === 'connecting'
-        ? '— connecting…'
-        : '— disconnected';
+        ? t('ws.state.connecting')
+        : t('ws.state.disconnected');
 }
 
 /** The URL text box, or the default when blank. */
@@ -866,7 +871,7 @@ function markWsError(): void {
   if (!mayReconnect()) return;
   els.wsDot.classList.add('dot--error');
   els.wsState.className = 'ws-state ws-state--error';
-  els.wsState.textContent = '— retrying every 10 s';
+  els.wsState.textContent = t('ws.state.retrying');
 }
 
 function connect(): void {
@@ -880,14 +885,14 @@ function connect(): void {
   userStopped = false;
   const url = currentWsUrl();
   setWsState('connecting');
-  logEvent(`WebSocket: connecting to ${url}…`);
+  logEvent(t('log.wsConnecting', { url }));
   let socket: WebSocket;
   try {
     socket = new WebSocket(url);
   } catch (err) {
     setWsState('closed');
     markWsError();
-    logEvent(`WebSocket: invalid URL — ${(err as Error).message}`, 'error');
+    logEvent(t('log.wsInvalidUrl', { message: (err as Error).message }), 'error');
     return;
   }
   ws = socket;
@@ -895,7 +900,7 @@ function connect(): void {
     if (ws !== socket) return;
     setWsState('open');
     wasConnected = true;
-    logEvent(`WebSocket: connected to ${url}`);
+    logEvent(t('log.wsConnected', { url }));
     flushPending();
   };
   socket.onmessage = (event) => {
@@ -914,11 +919,11 @@ function connect(): void {
       return;
     }
     if (userStopped) {
-      if (wasConnected) logEvent('WebSocket: disconnected (by user).');
-      else logEvent('WebSocket: connect cancelled.', 'error');
+      if (wasConnected) logEvent(t('log.wsDisconnected'));
+      else logEvent(t('log.wsConnectCancelled'), 'error');
     } else {
       markWsError();
-      logEvent('WebSocket: connection failed or dropped — retrying every 10 s.', 'error');
+      logEvent(t('log.wsFailed'), 'error');
     }
   };
 }
@@ -944,7 +949,7 @@ function logFrame(kind: FrameKind, text: string): void {
   time.textContent = new Date().toLocaleTimeString([], { hour12: false });
   const msg = document.createElement('span');
   msg.className = 'msg';
-  msg.textContent = kind === 'pause' ? '⏸ pause (not sent)' : text;
+  msg.textContent = kind === 'pause' ? t('log.pauseNotSent') : text;
   row.append(time, msg);
   els.frames.append(row);
   // Tool calls stand apart from the transcript: mark each one with a
@@ -1086,9 +1091,9 @@ interface Arch {
 }
 
 const ARCHES: Arch[] = [
-  { key: 'tiny', name: 'TinyStreaming', label: 'Tiny · fastest' },
-  { key: 'small', name: 'SmallStreaming', label: 'Small · balanced' },
-  { key: 'medium', name: 'MediumStreaming', label: 'Medium · most accurate' },
+  { key: 'tiny', name: 'TinyStreaming', label: t('arch.tiny.label') },
+  { key: 'small', name: 'SmallStreaming', label: t('arch.small.label') },
+  { key: 'medium', name: 'MediumStreaming', label: t('arch.medium.label') },
 ];
 
 /** Default model size when nothing (valid) is persisted. */
@@ -1330,9 +1335,9 @@ function setSending(enabled: boolean): void {
     lastSentTranslation = '';
     cancelPartialTranslation();
   }
-  els.micLabel.textContent = enabled ? 'Listening' : 'Muted';
+  els.micLabel.textContent = enabled ? t('mic.label.listening') : t('mic.label.muted');
   setStatus(
-    enabled ? 'Transcribing' : 'Microphone live — transcription suppressed',
+    enabled ? t('status.transcribing') : t('status.muted'),
     enabled ? 'ready' : 'info',
   );
   if (enabled) onMicEnabled();
@@ -1386,12 +1391,12 @@ function onCommand(rawCommand: string): void {
   const command = rawCommand.trim();
   if (!command) return;
   if (!els.enableCommands.checked) {
-    logEvent(`Command ignored (commands disabled): ${command}`);
+    logEvent(t('log.commandIgnored', { command }));
     return;
   }
   logFrame('cmd', command);
   if (!runCommand(command)) {
-    logEvent(`Unknown command: ${command}`, 'error');
+    logEvent(t('error.unknownCommand', { command }), 'error');
   }
 }
 
@@ -1433,7 +1438,7 @@ function runCommand(command: string): boolean {
       case 'translationDirection': {
         const value = parseTranslationDirection(arg);
         if (!value) {
-          logEvent(`Translation: unknown direction "${arg}" (use EN_JP, JP_EN, or OFF).`, 'error');
+          logEvent(t('error.invalidTranslationDirection', { arg }), 'error');
           return true;
         }
         els.translationDirection.value = value;
@@ -1608,11 +1613,9 @@ async function resolveModelUrls(key: ArchKey): Promise<Record<string, string>> {
     if (missing.size === 0) break;
     if (found > before) {
       stalls = 0;
-      logEvent(
-        `Model ${key}: ${found}/${MODEL_FILES.length} files on the server — waiting for the rest…`,
-      );
+      logEvent(t('log.modelProbeFound', { key, found, total: MODEL_FILES.length }));
       setStatus(
-        `Waiting for the ${key} model to finish downloading (${found}/${MODEL_FILES.length} files)…`,
+        t('status.waitingForModelFiles', { key, found, total: MODEL_FILES.length }),
         'info',
       );
     } else {
@@ -1626,13 +1629,18 @@ async function resolveModelUrls(key: ArchKey): Promise<Record<string, string>> {
   });
   const localCount = MODEL_FILES.length - missing.size;
   if (localCount === MODEL_FILES.length) {
-    logEvent(`Model ${key}: loading from ${local} (all files local).`);
+    logEvent(t('log.modelFromLocal', { key, local }));
   } else if (localCount === 0) {
-    logEvent(`Model ${key}: not on server — loading from ${remote}.`);
+    logEvent(t('log.modelFromRemote', { key, remote }));
   } else {
     logEvent(
-      `Model ${key}: ${localCount}/${MODEL_FILES.length} files from ${local}, ` +
-        `rest from ${remote}.`,
+      t('log.modelMixed', {
+        key,
+        localCount,
+        total: MODEL_FILES.length,
+        local,
+        remote,
+      }),
     );
   }
   return result;
@@ -1650,15 +1658,15 @@ function buildMic(arch: Arch): MicTranscriber {
 async function loadModel(): Promise<void> {
   const generation = ++loadGeneration; // a newer selection supersedes this load
   const arch = ARCHES.find((a) => a.key === selectedArch)!;
-  setStatus(`Loading the ${arch.key} model…`);
-  logEvent(`Model ${arch.key}: loading…`);
+  setStatus(t('status.modelLoading', { key: arch.key }));
+  logEvent(t('log.modelLoading', { key: arch.key }));
   setProgress(null);
   const instance = buildMic(arch);
   instance.modelsFrom(await resolveModelUrls(arch.key));
   try {
     await instance.load();
   } catch (err) {
-    logEvent(`Model ${arch.key}: load failed — ${(err as Error).message}`, 'error');
+    logEvent(t('log.modelLoadFailed', { key: arch.key, message: (err as Error).message }), 'error');
     throw err;
   }
   if (generation !== loadGeneration) {
@@ -1669,7 +1677,7 @@ async function loadModel(): Promise<void> {
   setProgress(1);
   els.mic.disabled = false;
   if (!running) showReadyState();
-  logEvent(`Model ${arch.key}: loaded successfully.`);
+  logEvent(t('log.modelLoaded', { key: arch.key }));
 }
 
 // --- Microphone states ---------------------------------------------------------
@@ -1689,14 +1697,14 @@ function isMicPermissionError(err: unknown): boolean {
 
 /** Model loaded and idle: the mic can be pressed again. */
 function showReadyState(): void {
-  els.micLabel.textContent = 'Ready';
-  setStatus('Model ready - press the mic to start sending', 'ready');
+  els.micLabel.textContent = t('mic.label.ready');
+  setStatus(t('status.modelReady'), 'ready');
 }
 
 /** Microphone access refused by the user (or previously denied). */
 function showPermissionDeniedState(): void {
-  els.micLabel.textContent = 'Failed';
-  setStatus('The microphone permission was denied', 'error');
+  els.micLabel.textContent = t('mic.label.failed');
+  setStatus(t('error.micDenied'), 'error');
 }
 
 /** The current permission state, falling back to 'prompt' when unqueryable. */
@@ -1718,8 +1726,8 @@ async function ensureMicPermission(): Promise<void> {
   const state = await currentMicPermission();
   if (state === 'denied') throw micPermissionError();
   if (state !== 'prompt') return; // already granted
-  els.micLabel.textContent = 'Waiting for Microphone Permission...';
-  setStatus('Authorize the permission dialog to start sending', 'info');
+  els.micLabel.textContent = t('mic.label.waitingPermission');
+  setStatus(t('status.authorizePermission'), 'info');
   try {
     // Triggers the browser's permission dialog; the stream is released right
     // away — the transcriber opens its own once permission is granted.
@@ -1734,7 +1742,7 @@ async function ensureMicPermission(): Promise<void> {
 /** Warm-starts the model download as soon as the page loads. */
 function warmStart(): void {
   micReady = loadModel().catch((err: Error) => {
-    setStatus(`Model load failed: ${err.message}`, 'error');
+    setStatus(t('error.modelLoadFailed', { message: err.message }), 'error');
   });
 }
 
@@ -1744,14 +1752,14 @@ async function loadBinding(): Promise<MoonshineModule> {
   try {
     return await loadMoonshine();
   } catch (err) {
-    logEvent(`Binding: failed to load from ${url} — ${(err as Error).message}`, 'error');
+    logEvent(t('error.bindingLoadFailed', { url, message: (err as Error).message }), 'error');
     throw err;
   }
 }
 
 async function startListening(): Promise<void> {
   els.mic.disabled = true;
-  els.micLabel.textContent = 'Starting…';
+  els.micLabel.textContent = t('mic.label.starting');
   try {
     await micReady; // the model may still be downloading on first press
     if (!mic) await loadModel();
@@ -1760,15 +1768,15 @@ async function startListening(): Promise<void> {
     running = true;
     sending = true; // a fresh start always sends
     document.body.dataset.state = 'listening';
-    els.mic.setAttribute('aria-label', 'Stop listening');
-    els.micLabel.textContent = 'Listening';
-    setStatus('Transcribing', 'ready');
+    els.mic.setAttribute('aria-label', t('mic.aria.stop'));
+    els.micLabel.textContent = t('mic.label.listening');
+    setStatus(t('status.transcribing'), 'ready');
     onMicEnabled();
   } catch (err) {
     if (isMicPermissionError(err)) {
       showPermissionDeniedState();
     } else {
-      els.micLabel.textContent = 'Ready';
+      els.micLabel.textContent = t('mic.label.ready');
       setStatus((err as Error).message, 'error');
     }
   } finally {
@@ -1783,7 +1791,7 @@ async function stopListening(): Promise<void> {
   sending = true; // reset silently — the [disabled] frame below covers the stop
   els.live.textContent = '';
   document.body.dataset.state = 'idle';
-  els.mic.setAttribute('aria-label', 'Start listening');
+  els.mic.setAttribute('aria-label', t('mic.aria.start'));
   showReadyState();
   els.mic.disabled = false;
   onMicDisabled();
@@ -1942,7 +1950,7 @@ setInterval(() => {
 function showToast(): void {
   const toast = document.createElement('div');
   toast.className = 'toast';
-  toast.textContent = 'Copied!';
+  toast.textContent = t('toast.copied');
   document.body.appendChild(toast);
   setTimeout(() => toast.remove(), 3000);
 }
@@ -1962,8 +1970,8 @@ void (async () => {
   } catch {
     // loadBinding already logged the details to the STATUS panel; make the
     // failure visible in the mic area instead of dying silently.
-    els.micLabel.textContent = 'Failed';
-    setStatus('The Moonshine binding failed to load', 'error');
+    els.micLabel.textContent = t('mic.label.failed');
+    setStatus(t('error.bindingFailed'), 'error');
     return;
   }
   selectedArch = loadArchPreference();

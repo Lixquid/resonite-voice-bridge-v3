@@ -1,0 +1,134 @@
+{
+    "mic": {
+        "label": {
+            "failed": "Failed",
+            "listening": "Listening",
+            "muted": "Muted",
+            "ready": "Ready",
+            "starting": "Starting…",
+            "waitingPermission": "Waiting for Microphone Permission..."
+        },
+        "aria": {
+            "stop": "Stop listening",
+            "start": "Start listening"
+        }
+    },
+    "status": {
+        "transcribing": "Transcribing",
+        "muted": "Microphone live — transcription suppressed",
+        "modelReady": "Model ready - press the mic to start sending",
+        "authorizePermission": "Authorize the permission dialog to start sending",
+        "modelLoading": "Loading the {key} model…",
+        "waitingForModelFiles": "Waiting for the {key} model to finish downloading ({found}/{total} files)…"
+    },
+    "error": {
+        "micDenied": "The microphone permission was denied",
+        "bindingFailed": "The Moonshine binding failed to load",
+        "modelLoadFailed": "Model load failed: {message}",
+        "bindingLoadFailed": "Binding: failed to load from {url} — {message}",
+        "unknownCommand": "Unknown command: {command}",
+        "invalidTranslationDirection": "Translation: unknown direction \"{arg}\" (use EN_JP, JP_EN, or OFF).",
+        "missingElement": "Missing #{id} — index.html and main.ts are out of sync."
+    },
+    "log": {
+        "modelLoading": "Model {key}: loading…",
+        "modelLoadFailed": "Model {key}: load failed — {message}",
+        "modelLoaded": "Model {key}: loaded successfully.",
+        "modelFromLocal": "Model {key}: loading from {local} (all files local).",
+        "modelFromRemote": "Model {key}: not on server — loading from {remote}.",
+        "modelMixed": "Model {key}: {localCount}/{total} files from {local}, rest from {remote}.",
+        "modelProbeFound": "Model {key}: {found}/{total} files on the server — waiting for the rest…",
+        "commandIgnored": "Command ignored (commands disabled): {command}",
+        "wsConnecting": "WebSocket: connecting to {url}…",
+        "wsConnected": "WebSocket: connected to {url}",
+        "wsInvalidUrl": "WebSocket: invalid URL — {message}",
+        "wsDisconnected": "WebSocket: disconnected (by user).",
+        "wsConnectCancelled": "WebSocket: connect cancelled.",
+        "wsFailed": "WebSocket: connection failed or dropped — retrying every 10 s.",
+        "pauseNotSent": "⏸ pause (not sent)"
+    },
+    "ws": {
+        "state": {
+            "disconnected": "— disconnected",
+            "connecting": "— connecting…",
+            "connected": "— connected",
+            "retrying": "— retrying every 10 s"
+        },
+        "button": {
+            "connect": "Connect",
+            "disconnect": "Disconnect",
+            "cancel": "Cancel"
+        }
+    },
+    "arch": {
+        "tiny": { "label": "Tiny · fastest" },
+        "small": { "label": "Small · balanced" },
+        "medium": { "label": "Medium · most accurate" }
+    },
+    "toast": {
+        "copied": "Copied!"
+    },
+    "needle": {
+        "status": {
+            "loadingEngine": "Needle: loading engine…",
+            "preparingTools": "Needle: preparing tools…"
+        },
+        "log": {
+            "downloading": "Needle: downloading model — {mb} MB",
+            "downloadingWithTotal": "Needle: downloading model — {mb} / {total} MB",
+            "noToolCalls": "Needle: no tool calls (confidence {confidence}).",
+            "belowThreshold": "Needle: confidence {confidence} below threshold {threshold} — logged, not emitted: {described}",
+            "error": "Needle: {message}"
+        },
+        "error": {
+            "downloadFailed": "download failed ({reason}): {url}",
+            "modelLoadFailed": "model load failed",
+            "toolsRejected": "tool schema rejected by the engine",
+            "workerFailed": "needle engine worker failed",
+            "notRunning": "needle engine worker is not running"
+        }
+    },
+    "translation": {
+        "label": {
+            "en-jp": "EN → JP",
+            "jp-en": "JP → EN"
+        },
+        "status": {
+            "preparing": "Translation: preparing the {label} model…",
+            "downloading": "Translation: downloading the {label} model — {loaded} / {total} MB",
+            "loading": "Translation: loading the {label} model ({file})…"
+        },
+        "log": {
+            "queueOverflow": "Translation: queue overflow — dropped the oldest pending request.",
+            "error": "Translation: {message}",
+            "workerError": "worker error: {message}",
+            "unhandledRejection": "unhandled rejection: {message}",
+            "unknownWorkerError": "unknown worker error"
+        },
+        "error": {
+            "released": "Translation: released",
+            "workerFailed": "translation worker failed",
+            "notRunning": "translation worker is not running"
+        }
+    },
+    "nl": {
+        "placeholder": {
+            "target": "Target word",
+            "replacement": "Replacement word"
+        },
+        "arrow": "→",
+        "remove": "✕",
+        "deleteEntry": "Delete entry",
+        "log": {
+            "enabledTool": "Natural Language Tools: enabled tool \"{name}\".",
+            "disabledTool": "Natural Language Tools: disabled tool \"{name}\".",
+            "enabledOnly": "Natural Language Tools: enabled only {names}."
+        },
+        "error": {
+            "parseFailed": "Natural Language Tools: {label} tool definitions are not valid JSON — {message}",
+            "definitionsInvalid": "Natural Language Tools: tool definitions are not valid JSON — {message}",
+            "disabledToolNotFound": "Natural Language Tools: disabled tool \"{name}\" not found.",
+            "liveToolNotFound": "Natural Language Tools: live tool \"{name}\" not found."
+        }
+    }
+}

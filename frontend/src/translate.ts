@@ -29,6 +29,8 @@ export type TranslationDirection = 'en-jp' | 'jp-en';
  * The URL must be absolute: the worker is created from a blob URL, where
  * origin-relative paths do not resolve against the page.
  */
+import { t, workerLocale } from './i18n';
+
 const TRANSLATION_BASE = `${window.location.origin}/translation`;
 
 /**
@@ -50,7 +52,7 @@ const QUEUE_LIMIT = 10;
 
 /** Human-readable label for a direction, used in status messages. */
 function directionLabel(dir: TranslationDirection): string {
-  return dir === 'en-jp' ? 'EN → JP' : 'JP → EN';
+  return dir === 'en-jp' ? t('translation.label.en-jp') : t('translation.label.jp-en');
 }
 
 /**
@@ -62,6 +64,8 @@ function directionLabel(dir: TranslationDirection): string {
  * chain so concurrent requests cannot double-load a model.
  */
 const WORKER_SOURCE = `
+const L = ${JSON.stringify(workerLocale.translation)};
+function fmt(s, p) { for (var k in p) { s = s.split("{" + k + "}").join(p[k]); } return s; }
 const DIRECTIONS = { 'en-jp': 'opus-tatoeba-en-ja', 'jp-en': 'opus-mt-ja-en' };
 let lib = null;
 const pipes = new Map();
@@ -127,8 +131,8 @@ async function getPipe(dir, base) {
 
 let chain = Promise.resolve();
 // Diagnostics: surface uncaught worker failures (with stacks) to the host.
-self.addEventListener('error', (e) => self.postMessage({ type: 'workerlog', message: 'worker error: ' + ((e && e.error && (e.error.stack || e.error.message)) || e.message || 'unknown') }));
-self.addEventListener('unhandledrejection', (e) => self.postMessage({ type: 'workerlog', message: 'unhandled rejection: ' + ((e.reason && (e.reason.stack || e.reason.message)) || e.reason) }));
+self.addEventListener('error', (e) => self.postMessage({ type: 'workerlog', message: fmt(L.log.workerError, { message: ((e && e.error && (e.error.stack || e.error.message)) || e.message || 'unknown') }) }));
+self.addEventListener('unhandledrejection', (e) => self.postMessage({ type: 'workerlog', message: fmt(L.log.unhandledRejection, { message: ((e.reason && (e.reason.stack || e.reason.message)) || e.reason) }) }));
 self.onmessage = (event) => {
   const message = event.data;
   chain = chain.then(async () => {
@@ -181,7 +185,7 @@ const DOWNLOAD_STATUS_INTERVAL_MS = 3000;
 /** Timestamp of the last emitted download status, for throttling. */
 let lastDownloadStatus = 0;
 /** Error whose message marks an intentional release (not worth logging). */
-const RELEASED = 'Translation: released';
+const RELEASED = t('translation.error.released');
 
 const queue: TranslationJob[] = [];
 let processing = false;
@@ -256,7 +260,7 @@ function enqueue(
     while (queue.length > QUEUE_LIMIT) {
       const dropped = queue.shift()!;
       dropped.resolve(null);
-      handlers?.onLog('Translation: queue overflow — dropped the oldest pending request.', true);
+      handlers?.onLog(t('translation.log.queueOverflow'), true);
     }
     pump();
   });
@@ -280,7 +284,7 @@ async function pump(): Promise<void> {
     onProgress = (message) => handlers?.onStatus(message);
     // Shown immediately: the desktop client may download for a while before
     // the first byte reaches the browser (and with it, the first event).
-    onProgress(`Translation: preparing the ${directionLabel(job.dir)} model…`);
+    onProgress(t('translation.status.preparing', { label: directionLabel(job.dir) }));
     if (job.kind === 'load') {
       await rpc({ type: 'load', dir: job.dir, base: TRANSLATION_BASE });
       job.resolve(null);
@@ -298,7 +302,7 @@ async function pump(): Promise<void> {
   } catch (err) {
     job.resolve(null);
     if ((err as Error).message !== RELEASED) {
-      handlers?.onLog(`Translation: ${(err as Error).message}`, true);
+      handlers?.onLog(t('translation.log.error', { message: (err as Error).message }), true);
     }
   } finally {
     processing = false;
@@ -338,7 +342,7 @@ function ensureWorker(): void {
       error?: string;
     };
     if (m.type === 'workerlog') {
-      handlers?.onLog(m.message ?? 'unknown worker error', true);
+      handlers?.onLog(m.message ?? t('translation.log.unknownWorkerError'), true);
       return;
     }
     if (m.type === 'progress') {
@@ -349,11 +353,16 @@ function ensureWorker(): void {
       const label = directionLabel(dir);
       if (typeof m.total === 'number' && m.total > 0 && typeof m.loaded === 'number') {
         onProgress?.(
-          `Translation: downloading the ${label} model — ` +
-            `${(m.loaded / 1048576).toFixed(1)} / ${(m.total / 1048576).toFixed(1)} MB`,
+          t('translation.status.downloading', {
+            label,
+            loaded: (m.loaded / 1048576).toFixed(1),
+            total: (m.total / 1048576).toFixed(1),
+          }),
         );
       } else {
-        onProgress?.(`Translation: loading the ${label} model (${m.file ?? 'model'})…`);
+        onProgress?.(
+          t('translation.status.loading', { label, file: m.file ?? 'model' }),
+        );
       }
       return;
     }
@@ -365,7 +374,7 @@ function ensureWorker(): void {
     else pending.resolve(m.result);
   };
   worker.onerror = (event) => {
-    const error = new Error((event as ErrorEvent).message || 'translation worker failed');
+    const error = new Error((event as ErrorEvent).message || t('translation.error.workerFailed'));
     for (const pending of rpcPending.values()) pending.reject(error);
     rpcPending.clear();
     // The worker is unusable after an uncaught error: drop it so the next
@@ -379,7 +388,7 @@ function ensureWorker(): void {
 function rpc(payload: Record<string, unknown>): Promise<unknown> {
   return new Promise((resolve, reject) => {
     if (!worker) {
-      reject(new Error('translation worker is not running'));
+      reject(new Error(t('translation.error.notRunning')));
       return;
     }
     const id = ++rpcSeq;

@@ -11,6 +11,8 @@
  * never blocks the transcription UI.
  */
 
+import { t, workerLocale } from './i18n';
+
 /**
  * Base URL for the Needle 3 engine and model. The desktop client downloads
  * the pinned Hugging Face revision (files wasm/needle.js, wasm/needle.wasm
@@ -45,6 +47,8 @@ export interface NeedleResult {
  * postMessage.
  */
 const WORKER_SOURCE = [
+  `const L = ${JSON.stringify(workerLocale.needle)};`,
+  'function fmt(s, p) { for (var k in p) { s = s.split("{" + k + "}").join(p[k]); } return s; }',
   'var mod = null, outPtr = 0;',
   'function cstr(s) { var b = new TextEncoder().encode(s), p = mod._malloc(b.length + 1); mod.HEAPU8.set(b, p); mod.HEAPU8[p + b.length] = 0; return p; }',
   // The desktop client downloads the engine and model into its cache in the
@@ -62,7 +66,7 @@ const WORKER_SOURCE = [
   '      lastErr = new Error("HTTP " + r.status);',
   '    } catch (err) { lastErr = err; }',
   '  }',
-  '  throw new Error("download failed (" + (lastErr && lastErr.message || lastErr) + "): " + url);',
+  '  throw new Error(fmt(L.error.downloadFailed, { reason: (lastErr && lastErr.message || lastErr), url: url }));',
   '}',
   'async function fetchBytes(url, onProgress) {',
   '  var r = await fetchWithRetry(url);',
@@ -84,7 +88,7 @@ const WORKER_SOURCE = [
   '      mod = await createNeedle({ wasmBinary: await wasm });',
   '      var blob = await cact, p = mod._malloc(blob.length);',
   '      mod.HEAPU8.set(blob, p);',
-  '      if (mod._needle_load(p, BigInt(blob.length)) !== 0) throw new Error("model load failed");',
+  '      if (mod._needle_load(p, BigInt(blob.length)) !== 0) throw new Error(L.error.modelLoadFailed);',
   '      outPtr = mod._malloc(16384);',
   '      result = true;',
   '    } else if (m.type === "init") { result = mod._needle_init(cstr(""), cstr(m.tools), 0); }',
@@ -112,8 +116,8 @@ let lastDownloadStatus = 0;
 function downloadStatus(got: number, total: number): string {
   const mb = (got / 1048576).toFixed(1);
   return total
-    ? `Needle: downloading model — ${mb} / ${(total / 1048576).toFixed(1)} MB`
-    : `Needle: downloading model — ${mb} MB`;
+    ? t('needle.log.downloadingWithTotal', { mb, total: (total / 1048576).toFixed(1) })
+    : t('needle.log.downloading', { mb });
 }
 
 /** Installs the progress-reporting callback for the current queued operation. */
@@ -130,7 +134,7 @@ function trackDownload(onStatus?: (message: string) => void): void {
 /** Starts the worker and downloads the engine + model blob if not yet loaded. */
 async function ensureEngineLoaded(onStatus?: (message: string) => void): Promise<void> {
   if (engineWorker) return;
-  onStatus?.('Needle: loading engine…');
+  onStatus?.(t('needle.status.loadingEngine'));
   startWorker();
   await rpc({ type: 'load', base: NEEDLE_BASE, blob: NEEDLE_BLOB });
   loadedTools = null;
@@ -152,7 +156,7 @@ function startWorker(): void {
     else pending.resolve(m.result);
   };
   engineWorker.onerror = (event) => {
-    const error = new Error((event as ErrorEvent).message || 'needle engine worker failed');
+    const error = new Error((event as ErrorEvent).message || t('needle.error.workerFailed'));
     for (const pending of rpcPending.values()) pending.reject(error);
     rpcPending.clear();
   };
@@ -161,7 +165,7 @@ function startWorker(): void {
 function rpc(payload: Record<string, unknown>): Promise<unknown> {
   return new Promise((resolve, reject) => {
     if (!engineWorker) {
-      reject(new Error('needle engine worker is not running'));
+      reject(new Error(t('needle.error.notRunning')));
       return;
     }
     const id = ++rpcSeq;
@@ -187,9 +191,9 @@ export function needleRun(
     try {
       await ensureEngineLoaded(onStatus);
       if (loadedTools !== tools) {
-        onStatus?.('Needle: preparing tools…');
+        onStatus?.(t('needle.status.preparingTools'));
         const rc = (await rpc({ type: 'init', tools })) as number;
-        if (rc < 0) throw new Error('tool schema rejected by the engine');
+        if (rc < 0) throw new Error(t('needle.error.toolsRejected'));
         loadedTools = tools;
       }
       await rpc({ type: 'reset' });
