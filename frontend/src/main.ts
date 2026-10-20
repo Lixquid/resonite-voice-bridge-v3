@@ -57,7 +57,21 @@ type WelcomeChoice = 'transcription' | 'en-ja' | 'ja-en' | 'all';
 
 // --- Constants -------------------------------------------------------------------
 
-const DEFAULT_WS_URL = 'ws://localhost:6789';
+/**
+ * Default relay URL, derived from the page's own host: the desktop client
+ * serves the frontend and the WebSocket relay on the same port, so the
+ * connection starts out pointing at wherever this page was loaded from. It
+ * is only a default — the URL stays editable in the connection settings.
+ * When the page was not served over HTTP(S) (e.g. opened from disk) the
+ * historic default applies. Note that under `npm run dev` the relay is not
+ * proxied by the Vite dev server, so its URL must be entered by hand.
+ */
+const DEFAULT_WS_URL = (() => {
+  if (location.protocol === 'http:' || location.protocol === 'https:') {
+    return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
+  }
+  return 'ws://localhost:6789';
+})();
 const QUEUE_LIMIT = 500;
 /** Maximum rows kept in the on-page frame log. */
 const FRAME_LOG_LIMIT = 500;
@@ -897,6 +911,10 @@ const els = {
 // The settings gear is only shown when the localStorage flag
 // `showSuperAdvancedSettings` is set to the string "true".
 els.settings.hidden = localStorage.getItem('showSuperAdvancedSettings') !== 'true';
+
+// Default the relay URL to the host the page itself was served from (see
+// DEFAULT_WS_URL); the user can still edit it freely afterwards.
+els.wsUrl.value = DEFAULT_WS_URL;
 
 // --- Locale selector -------------------------------------------------------------
 

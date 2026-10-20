@@ -1,6 +1,7 @@
 // Command systray is the Graphical Relay program for Resonite Voice Bridge.
 //
-// It lives inside the system tray and serves, on the single port 6789:
+// It lives inside the system tray and serves, on a single port (6789 by
+// default, configurable with the -port command line flag):
 //
 //   - The built frontend (see frontend/) over plain HTTP.
 //   - A WebSocket relay on the root path: any text frame received from one
@@ -22,12 +23,14 @@ import (
 	"fyne.io/systray"
 )
 
-// The one and only port this application exposes.
-const listenPort = "6789"
+// The one and only port this application exposes. Overridable with the
+// -port command line flag (set up in main).
+var listenPort = "6789"
 
 func main() {
 	showVersion := flag.Bool("version", false, "print the embedded version and exit")
 	clearCacheFlag := flag.Bool("clear-cache", false, "delete the per-user model cache before starting, forcing a re-download of all models")
+	flag.StringVar(&listenPort, "port", listenPort, "TCP port the web interface and WebSocket relay listen on")
 	flag.Parse()
 
 	if *showVersion {
@@ -63,14 +66,21 @@ func main() {
 
 	ln, err := net.Listen("tcp", ":"+listenPort)
 	if err != nil {
-		log.Fatalf("Failed to listen on port %s: %v", listenPort, err)
+		// The most common cause is the port already being used by another
+		// instance of this program. Without a dialog the failure would be
+		// invisible: as a tray app there is no console to print to, and on
+		// Windows the binary is linked with -H=windowsgui (see Makefile),
+		// so log output goes nowhere and the app would "silently exit".
+		showErrorDialogAndExit("Resonite Voice Bridge",
+			fmt.Sprintf("Could not listen on port %s.\n\n%s\n\nIs the program already running?", listenPort, err))
 	}
 
 	server := &http.Server{Handler: newHandler()}
 	go func() {
 		log.Printf("Serving on http://localhost:%s", listenPort)
 		if err := server.Serve(ln); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("HTTP server failed: %v", err)
+			showErrorDialogAndExit("Resonite Voice Bridge",
+				fmt.Sprintf("The HTTP server failed:\n\n%v", err))
 		}
 	}()
 
