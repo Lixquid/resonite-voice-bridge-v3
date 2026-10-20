@@ -16,6 +16,30 @@ export type { MicTranscriber, ModelArch, TranscriptLine };
 
 /** The vendored binding location, also shown by the settings reset button. */
 export const DEFAULT_MODULE_URL = '/wasm/dist/index.js';
+
+/**
+ * Name of the Cache API cache the binding's asset downloader stores fetched
+ * model bytes in (DEFAULT_CACHE in its asset-downloader.js). The binding
+ * serves a cache hit as-is — no revalidation, no size check — and the cache
+ * persists across sessions, so stale or corrupt entries silently wedge every
+ * later load. The app therefore versions the URLs it hands to the binding
+ * (see resolveModelUrls in main.ts) so old entries cannot match, and purges
+ * this cache when a load fails (see purgeBindingModelCache).
+ */
+export const BINDING_MODEL_CACHE = 'moonshine-models-v1';
+
+/**
+ * Deletes the binding's browser-side model cache (best effort: resolves
+ * immediately where the Cache API is unavailable, and swallows errors — a
+ * failed purge only means the next load may hit the same stale entries).
+ */
+export async function purgeBindingModelCache(): Promise<void> {
+  try {
+    if (typeof caches !== 'undefined') await caches.delete(BINDING_MODEL_CACHE);
+  } catch {
+    // Purging is a recovery aid, never a requirement.
+  }
+}
 /** Persisted override for where the binding is imported from. */
 const MODULE_URL_KEY = 'moduleUrl';
 

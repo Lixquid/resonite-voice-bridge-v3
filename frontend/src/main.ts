@@ -2,6 +2,7 @@ import {
   DEFAULT_MODULE_URL,
   loadMoonshine,
   loadModuleUrlPreference,
+  purgeBindingModelCache,
   resetMoonshine,
   saveModuleUrl,
   type MicTranscriber,
@@ -1862,18 +1863,25 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * HEAD-probes one local model file, reporting whether the server actually has
- * it. The probe checks the content type because SPA dev servers answer 200
- * with index.html for unknown paths rather than a 404.
+ * HEAD-probes one local model file, reporting its size in bytes when the
+ * server actually has it (null when not). The probe checks the content type
+ * because SPA dev servers answer 200 with index.html for unknown paths rather
+ * than a 404. The size doubles as a content version: the loader stamps the
+ * URLs it hands to the Moonshine binding with it (see resolveModelUrls), so
+ * the binding's own browser-side model cache (which serves a stored response
+ * as-is, without revalidating) cannot match entries stored under an older
+ * version of the file.
  */
-async function probeLocalFile(url: string): Promise<boolean> {
+async function probeLocalFile(url: string): Promise<number | null> {
   try {
     const response = await fetch(url, { method: 'HEAD' });
-    if (!response.ok) return false;
+    if (!response.ok) return null;
     const type = response.headers.get('content-type') ?? '';
-    return !type.includes('text/html');
+    if (type.includes('text/html')) return null;
+    const size = Number(response.headers.get('content-length'));
+    return Number.isFinite(size) && size > 0 ? size : 0;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -1913,15 +1921,21 @@ async function resolveModelUrls(key: ArchKey): Promise<Record<string, string>> {
     // Probe every file on the local path, re-probing the misses until they
     // all show up or the retry budget runs out. The first round runs
     // immediately; every later round waits one interval, so a fully-cached
-    // model is served with zero added latency.
+    // model is served with zero added latency. Each hit records the file's
+    // size — the content version stamped onto the loader URLs below.
     const missing = new Set<string>(files);
+    const localSizes = new Map<string, number>();
     let found = 0;
     let stalls = 0; // consecutive rounds that discovered no new file
     while (missing.size > 0 && stalls <= PROBE_MAX_STALLED_ROUNDS) {
       if (stalls > 0 || found > 0) await sleep(PROBE_INTERVAL_MS);
       const before = found;
       for (const name of [...missing]) {
-        if (await probeLocalFile(`${local}/${name}`)) missing.delete(name);
+        const size = await probeLocalFile(`${local}/${name}`);
+        if (size !== null) {
+          missing.delete(name);
+          localSizes.set(name, size);
+        }
       }
       found = files.length - missing.size;
       if (missing.size === 0) break;
@@ -1950,6 +1964,16 @@ async function resolveModelUrls(key: ArchKey): Promise<Record<string, string>> {
     missing.forEach((name) => {
       result[name] = `${remote}/${name}`;
     });
+    // Version the locally served files with their probed size. The Moonshine
+    // binding caches fetched model bytes in the browser's Cache API and
+    // serves a hit as-is — no revalidation, no size check — so entries stored
+    // by an older build (or with stale/corrupt bodies from earlier runs)
+    // would silently poison every later load. A URL that only matches one
+    // exact file version cannot hit them, and a redownloaded file (new size)
+    // re-caches automatically.
+    for (const [name, size] of localSizes) {
+      if (size > 0) result[name] = `${local}/${name}?v=${size}`;
+    }
     const localCount = files.length - missing.size;
     if (localCount === files.length) {
       logEvent(t('log.modelFromLocal', { key, local }));
@@ -2022,6 +2046,10 @@ async function loadModel(): Promise<void> {
     await instance.load();
   } catch (err) {
     logEvent(t('log.modelLoadFailed', { key: arch.key, message: (err as Error).message }), 'error');
+    // The binding serves its own browser-side cache hits without validating
+    // them, so a stale or corrupt entry wedges every retry identically. Purge
+    // it so the next attempt fetches fresh bytes from the server.
+    void purgeBindingModelCache();
     throw err;
   }
   if (generation !== loadGeneration) {

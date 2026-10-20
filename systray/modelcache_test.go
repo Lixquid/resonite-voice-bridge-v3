@@ -242,6 +242,15 @@ func TestServeModelCache(t *testing.T) {
 		if c.body != "" && recorder.Body.String() != c.body {
 			t.Errorf("serveModelCache(%q) body = %q, want %q", c.urlPath, recorder.Body.String(), c.body)
 		}
+		// Every served file is revalidated against this server: the on-disk
+		// cache folder is the single source of truth, so the browser must
+		// never reuse a stale heuristically-cached copy across app updates
+		// or after --clear-cache.
+		if c.status == http.StatusOK {
+			if got := recorder.Header().Get("Cache-Control"); got != "no-cache" {
+				t.Errorf("serveModelCache(%q) Cache-Control = %q, want %q", c.urlPath, got, "no-cache")
+			}
+		}
 	}
 }
 

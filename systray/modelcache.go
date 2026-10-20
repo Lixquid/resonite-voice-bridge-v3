@@ -473,6 +473,12 @@ func serveIfCached(w http.ResponseWriter, r *http.Request, full string) bool {
 // serveCacheFile serves one cache file, pinning the content type for
 // extensions the platform's MIME database gets wrong (see mimeOverrides in
 // server.go; .wasm is pinned too because some registries lack it entirely).
+// The response is marked no-cache: the browser must revalidate every use
+// against this server, whose on-disk cache folder is the single source of
+// truth. Without it a browser could serve heuristically-fresh stale bytes
+// across app updates (or after --clear-cache), which the model loader would
+// then take as valid — the same failure shape its own Cache Storage already
+// invites (see resolveModelUrls in frontend/src/main.ts).
 func serveCacheFile(w http.ResponseWriter, r *http.Request, full string) {
 	ext := strings.ToLower(filepath.Ext(full))
 	if ct, ok := mimeOverrides[ext]; ok {
@@ -480,6 +486,7 @@ func serveCacheFile(w http.ResponseWriter, r *http.Request, full string) {
 	} else if ext == ".wasm" {
 		w.Header().Set("Content-Type", "application/wasm")
 	}
+	w.Header().Set("Cache-Control", "no-cache")
 	http.ServeFile(w, r, full)
 }
 

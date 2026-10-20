@@ -87,6 +87,7 @@ func serveStaticFile(w http.ResponseWriter, r *http.Request, name string) {
 	if ct, ok := mimeOverrides[ext]; ok {
 		w.Header().Set("Content-Type", ct)
 	}
+	w.Header().Set("Cache-Control", "no-cache")
 	http.ServeFileFS(w, r, frontendFS, name)
 }
 
