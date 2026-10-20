@@ -671,3 +671,148 @@ func downloadGroupTestStatus(dir string) cacheGroupStatus {
 	}
 	return cacheGroupStatus{}
 }
+
+// TestProbeHeadKicksDownload verifies the model probe's HEAD requests are
+// answered 404 right away for files that are not cached yet — without
+// blocking on, and without being answered by, the download — while the
+// download itself is kicked off in the background exactly once, so the next
+// probe finds the file (the frontend's probe loop and the cache watcher's
+// toast then report the model honestly instead of the probe silently
+// downloading everything and logging it as already local).
+func TestProbeHeadKicksDownload(t *testing.T) {
+	dir := withTestCacheDir(t)
+
+	var mu sync.Mutex
+	downloads := map[string]int{}
+	started := make(chan struct{}, 100)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		downloads[r.URL.Path]++
+		mu.Unlock()
+		started <- struct{}{}
+		time.Sleep(2 * time.Second) // slow enough to outlast the HEAD round trip
+		_, _ = w.Write([]byte("asset:" + r.URL.Path))
+	}))
+	t.Cleanup(upstream.Close)
+
+	savedCDN, savedCDNRev := moonshineCDNBase, moonshineCDNRev
+	moonshineCDNBase = upstream.URL + "/model"
+	moonshineCDNRev = "test-en-rev"
+	t.Cleanup(func() { moonshineCDNBase, moonshineCDNRev = savedCDN, savedCDNRev })
+
+	head := func(urlPath string) *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest("HEAD", urlPath, nil)
+		if handled := serveModelCache(recorder, request); !handled {
+			t.Fatalf("serveModelCache(%q) was not handled by the cache", urlPath)
+		}
+		return recorder
+	}
+
+	// The first HEAD is answered 404 at once — the slow download must not
+	// delay (or answer) it.
+	began := time.Now()
+	if recorder := head("/models/small_streaming/encoder.ort"); recorder.Code != http.StatusNotFound {
+		t.Errorf("first HEAD status = %d, want %d", recorder.Code, http.StatusNotFound)
+	}
+	if elapsed := time.Since(began); elapsed > time.Second {
+		t.Errorf("first HEAD took %v; it must not block on the download", elapsed)
+	}
+
+	// The HEAD kicked the download off in the background...
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the HEAD did not kick off a background download")
+	}
+	// ...exactly once, even when the probe keeps re-HEADing the file.
+	for i := 0; i < 5; i++ {
+		if recorder := head("/models/small_streaming/encoder.ort"); recorder.Code != http.StatusNotFound {
+			t.Errorf("HEAD while downloading: status = %d, want %d", recorder.Code, http.StatusNotFound)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	// The download lands in the cache, and the next HEAD finds it (200).
+	full := filepath.Join(dir, "models", "small_streaming", "encoder.ort")
+	waitDeadline := time.Now().Add(10 * time.Second)
+	for {
+		if _, err := os.Stat(full); err == nil {
+			break
+		}
+		if time.Now().After(waitDeadline) {
+			t.Fatal("the kicked download never landed in the cache")
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if recorder := head("/models/small_streaming/encoder.ort"); recorder.Code != http.StatusOK {
+		t.Errorf("HEAD after the download: status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	mu.Lock()
+	count := downloads["/model/small-streaming-en/test-en-rev/encoder.ort"]
+	mu.Unlock()
+	if count != 1 {
+		t.Errorf("upstream downloads of encoder.ort = %d, want 1 (repeated HEADs must not re-download)", count)
+	}
+}
+
+// TestWarmupAndOnDemandShareOneDownload verifies the startup warmer and an
+// on-demand request that race for the same missing file download it once:
+// whoever arrives second joins the in-flight download instead of repeating
+// it (first-launch duplicate downloads also double-counted in the cache
+// watcher's toast totals).
+func TestWarmupAndOnDemandShareOneDownload(t *testing.T) {
+	withTestCacheDir(t)
+
+	var mu sync.Mutex
+	downloads := map[string]int{}
+	var gateOnce sync.Once
+	gate := make(chan struct{})
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		downloads[r.URL.Path]++
+		mu.Unlock()
+		gateOnce.Do(func() { close(gate) }) // signal that a download has begun
+		time.Sleep(500 * time.Millisecond)
+		_, _ = w.Write([]byte("asset:" + r.URL.Path))
+	}))
+	t.Cleanup(upstream.Close)
+
+	savedCDN, savedCDNRev, savedCDNJa, savedNeedle := moonshineCDNBase, moonshineCDNRev, moonshineCDNJaRev, needle3Base
+	moonshineCDNBase = upstream.URL + "/model"
+	moonshineCDNRev = "test-en-rev"
+	moonshineCDNJaRev = "test-ja-rev"
+	needle3Base = upstream.URL + "/needle3"
+	t.Cleanup(func() {
+		moonshineCDNBase, moonshineCDNRev, moonshineCDNJaRev, needle3Base = savedCDN, savedCDNRev, savedCDNJa, savedNeedle
+	})
+
+	// Start the warm-up and, as soon as its first download is in flight,
+	// request the same file on demand.
+	done := make(chan struct{})
+	go func() {
+		warmModelCache()
+		close(done)
+	}()
+	select {
+	case <-gate:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the warm-up never started downloading")
+	}
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest("GET", "/models/small_streaming/encoder.ort", nil)
+	if handled := serveModelCache(recorder, request); !handled {
+		t.Fatal("serveModelCache was not handled by the cache")
+	}
+	if recorder.Code != http.StatusOK {
+		t.Errorf("on-demand request status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	<-done // the warm-up finishes (everything cached, nothing re-downloaded)
+
+	mu.Lock()
+	count := downloads["/model/small-streaming-en/test-en-rev/encoder.ort"]
+	mu.Unlock()
+	if count != 1 {
+		t.Errorf("upstream downloads of encoder.ort = %d, want 1 (the warmer and the on-demand request must share one download)", count)
+	}
+}

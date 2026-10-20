@@ -10,7 +10,7 @@ import {
 } from './moonshine';
 import { applyStaticTranslations, getLanguage, setLanguage, t, type Language } from './i18n';
 import './style.css';
-import { noteCacheActivity, releaseCacheActivity } from './cacheStatus';
+import { fetchCacheStatus, noteCacheActivity, releaseCacheActivity } from './cacheStatus';
 import { needlePrewarm, needleRun, type NeedleCall } from './needle';
 import {
   setTranslationDirection,
@@ -1934,6 +1934,15 @@ async function resolveModelUrls(key: ArchKey): Promise<Record<string, string>> {
         );
       } else {
         stalls++;
+        // A round that found nothing new still counts against the budget —
+        // unless the backend is downloading this capability's files right
+        // now: the model is arriving (the toast shows the same progress),
+        // and the wait should outlast the download however slow it is.
+        // Without this, a large file downloading between two probe finds
+        // could exhaust the budget and make the loader fall back early.
+        const status = await fetchCacheStatus();
+        const group = status?.groups.find((g) => g.id === capability);
+        if (group && group.downloadingFiles > 0) stalls = 0;
       }
     }
 

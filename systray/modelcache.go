@@ -551,6 +551,32 @@ func warmModelCache() {
 	log.Printf("Model cache ready: %s", cacheDir())
 }
 
+// downloadNew downloads url into full (the absolute path of cache-relative
+// slash path rel) unless the file is cached by now. Callers hold fileLock(rel).
+func downloadNew(rel, url, full string) error {
+	if info, err := os.Stat(full); err == nil && !info.IsDir() && info.Size() > 0 {
+		return nil // already cached (or completed by a concurrent caller)
+	}
+	// Subdirectories within a group (e.g. needle3/wasm/) may not exist yet.
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		return err
+	}
+	return downloadFile(url, full)
+}
+
+// fetchInto ensures the cache holds the file at cache-relative slash path
+// rel, downloading it from url into full (its absolute path) when missing.
+// The per-file lock lets concurrent callers — the startup warmer, on-demand
+// requests and HEAD-probe kick-offs — share one download: whoever arrives
+// second waits for the in-flight download instead of repeating it, then
+// finds the file cached (see downloadNew).
+func fetchInto(rel, url, full string) error {
+	mu := fileLock(rel)
+	mu.Lock()
+	defer mu.Unlock()
+	return downloadNew(rel, url, full)
+}
+
 // downloadGroup ensures every file of one group exists in dir, downloading
 // the missing ones (a few retries each, as the downloads are hundreds of
 // megabytes in total and transient network failures are worth absorbing).
@@ -561,12 +587,8 @@ func downloadGroup(dir, base string, files []string) {
 	}
 	for _, name := range files {
 		dest := filepath.Join(dir, name)
-		// Subdirectories within a group (e.g. needle3/wasm/) may not exist yet.
-		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-			log.Printf("Model cache: %s: cannot create directory: %v", relCachePath(dest), err)
-			continue
-		}
-		if info, err := os.Stat(dest); err == nil && info.Size() > 0 {
+		rel := relCachePath(dest)
+		if info, err := os.Stat(dest); err == nil && !info.IsDir() && info.Size() > 0 {
 			continue // already cached
 		}
 		url := base + "/" + name
@@ -575,13 +597,16 @@ func downloadGroup(dir, base string, files []string) {
 			if attempt > 1 {
 				time.Sleep(time.Duration(attempt) * 2 * time.Second)
 			}
-			err = downloadFile(url, dest)
+			// fetchInto re-checks the cache under the per-file lock, so a
+			// concurrent on-demand download of the same file (the frontend
+			// racing the warmer on first launch) is joined, not repeated.
+			err = fetchInto(rel, url, dest)
 			if err == nil {
 				break
 			}
 		}
 		if err != nil {
-			log.Printf("Model cache: %s: FAILED: %v", relCachePath(dest), err)
+			log.Printf("Model cache: %s: FAILED: %v", rel, err)
 			continue
 		}
 	}
@@ -724,7 +749,11 @@ func humanSize(n int64) string {
 // cache directory, downloading on demand when a requested file is not yet
 // cached (the Japanese models and the translation engine are lazy groups —
 // see cacheGroups — and eager groups re-download here when a startup
-// download failed). It returns false for paths outside those prefixes.
+// download failed). GETs answer only once the file is cached (they block on
+// the download); HEADs — the frontend's model probes — answer 404 right
+// away and kick the download off in the background instead, so probing
+// never blocks and never downloads files under the table (see the HEAD
+// branch below). It returns false for paths outside those prefixes.
 // Requests inside the prefixes are always handled here — with a plain 404
 // for anything that is not an approved group file — so the frontend's model
 // probing never mistakes the SPA fallback (index.html) for a model file, and
@@ -748,6 +777,27 @@ func serveModelCache(w http.ResponseWriter, r *http.Request) bool {
 	if serveIfCached(w, r, full) {
 		return true
 	}
+	// The model probe (see resolveModelUrls in frontend/src/main.ts) HEADs
+	// the local paths to learn what the server has. A HEAD must neither block
+	// on nor silently perform the download: answer 404 (the file is not there
+	// yet) and kick the download off in the background, so the next probe
+	// round — and the cache watcher's toast, which reports the download while
+	// it runs — sees it appear. Answering the probe by downloading first made
+	// the probe loop find every file "immediately": the frontend logged the
+	// model as fully local while the backend log showed the same files being
+	// fetched on demand, and every probed file was downloaded twice (the
+	// warmer and the probe racing each other).
+	if r.Method == http.MethodHead {
+		if _, _, inFlight := downloadProgressOf(rel); !inFlight {
+			go func() {
+				if err := fetchInto(rel, url, full); err != nil {
+					log.Printf("Model cache: %s: FAILED: %v", rel, err)
+				}
+			}()
+		}
+		http.NotFound(w, r)
+		return true
+	}
 	// Not cached yet: download once, guarded by a per-file lock so
 	// concurrent requests for the same file share one download.
 	mu := fileLock(rel)
@@ -756,13 +806,8 @@ func serveModelCache(w http.ResponseWriter, r *http.Request) bool {
 	if serveIfCached(w, r, full) {
 		return true // downloaded by a concurrent request while we waited
 	}
-	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-		log.Printf("Model cache: %s: cannot create directory: %v", rel, err)
-		http.Error(w, "cache directory unavailable", http.StatusInternalServerError)
-		return true
-	}
 	log.Printf("Model cache: %s: not cached — downloading on demand", rel)
-	if err := downloadFile(url, full); err != nil {
+	if err := downloadNew(rel, url, full); err != nil {
 		log.Printf("Model cache: %s: FAILED: %v", rel, err)
 		http.Error(w, "download failed", http.StatusBadGateway)
 		return true
