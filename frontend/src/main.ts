@@ -1175,6 +1175,25 @@ function logFrame(kind: FrameKind, text: string): void {
   els.frames.scrollTop = els.frames.scrollHeight;
 }
 
+/**
+ * Whether the page was loaded with `?debug=1`: extra diagnostic events are
+ * only emitted to the STATUS panel in that case. They make the model pipeline
+ * visible inside the browser — where failures otherwise never leave a trace —
+ * but are far too noisy for everyday use. See INITIALDOWNLOAD.txt: the probe
+ * loop, the binding's Cache API behavior, and load failures below the binding
+ * API are exactly the things a backend log cannot show.
+ */
+const DEBUG_EVENTS = new URLSearchParams(location.search).get('debug') === '1';
+
+/**
+ * Logs one debug diagnostic to the STATUS panel; a no-op unless the page was
+ * loaded with `?debug=1` (see {@link DEBUG_EVENTS}). Debug lines keep plain
+ * English text — they are diagnostics, not localized UI copy.
+ */
+function debugLog(text: string): void {
+  if (DEBUG_EVENTS) logFrame('sys', text);
+}
+
 /** Logs a lifecycle event (WebSocket, model, binding) to the STATUS panel. */
 function logEvent(text: string, kind: 'sys' | 'error' | 'loading' = 'sys'): void {
   logFrame(kind, text);
@@ -1875,12 +1894,30 @@ function sleep(ms: number): Promise<void> {
 async function probeLocalFile(url: string): Promise<number | null> {
   try {
     const response = await fetch(url, { method: 'HEAD' });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      // A 404 here is the expected shape while the backend is still
+      // downloading the file on demand (see systray/modelcache.go) — the
+      // probe loop just re-runs. Anything else is worth knowing about.
+      debugLog(`[probe] ${url} → HTTP ${response.status}`);
+      return null;
+    }
     const type = response.headers.get('content-type') ?? '';
-    if (type.includes('text/html')) return null;
+    if (type.includes('text/html')) {
+      // A 200 with HTML is a dev-server SPA fallback, never a real model file.
+      debugLog(`[probe] ${url} → 200 but content-type ${type} (SPA fallback decoy)`);
+      return null;
+    }
     const size = Number(response.headers.get('content-length'));
-    return Number.isFinite(size) && size > 0 ? size : 0;
-  } catch {
+    if (!Number.isFinite(size) || size <= 0) {
+      debugLog(
+        `[probe] ${url} → 200 but unusable Content-Length (${response.headers.get('content-length')})`,
+      );
+      return 0;
+    }
+    debugLog(`[probe] ${url} → 200, ${size} bytes`);
+    return size;
+  } catch (err) {
+    debugLog(`[probe] ${url} → fetch failed: ${(err as Error).message}`);
     return null;
   }
 }
@@ -1908,6 +1945,10 @@ const PROBE_MAX_STALLED_ROUNDS = 30; // ~1 minute of probing without any new fil
 async function resolveModelUrls(key: ArchKey): Promise<Record<string, string>> {
   const { local, remote } = modelSources(key);
   const files = modelFileSet();
+  debugLog(
+    `[resolve] ${key}: ${files.length} files from ${local}` +
+      (remote ? ` (fallback ${remote})` : ' — bundled, all local'),
+  );
   const localUrls = Object.fromEntries(files.map((name) => [name, `${local}/${name}`]));
   if (!remote) return localUrls; // bundled model: all local
 
@@ -1927,8 +1968,10 @@ async function resolveModelUrls(key: ArchKey): Promise<Record<string, string>> {
     const localSizes = new Map<string, number>();
     let found = 0;
     let stalls = 0; // consecutive rounds that discovered no new file
+    let round = 0;
     while (missing.size > 0 && stalls <= PROBE_MAX_STALLED_ROUNDS) {
       if (stalls > 0 || found > 0) await sleep(PROBE_INTERVAL_MS);
+      round++;
       const before = found;
       for (const name of [...missing]) {
         const size = await probeLocalFile(`${local}/${name}`);
@@ -1938,6 +1981,7 @@ async function resolveModelUrls(key: ArchKey): Promise<Record<string, string>> {
         }
       }
       found = files.length - missing.size;
+      debugLog(`[probe] round ${round} for ${key}: ${found}/${files.length} found, stalls ${stalls}`);
       if (missing.size === 0) break;
       if (found > before) {
         stalls = 0;
@@ -1956,11 +2000,36 @@ async function resolveModelUrls(key: ArchKey): Promise<Record<string, string>> {
         // could exhaust the budget and make the loader fall back early.
         const status = await fetchCacheStatus();
         const group = status?.groups.find((g) => g.id === capability);
-        if (group && group.downloadingFiles > 0) stalls = 0;
+        if (group && group.downloadingFiles > 0) {
+          stalls = 0;
+          // The backend is fetching this group right now — wait it out.
+          debugLog(
+            `[probe] stall round ${stalls}: backend downloading ${capability} — ` +
+              `${group.cachedFiles}/${group.totalFiles} cached, ` +
+              `${(group.receivedBytes / 1048576).toFixed(1)}/` +
+              `${(group.totalBytes / 1048576).toFixed(1)} MB — budget reset`,
+          );
+        } else if (status && group) {
+          debugLog(
+            `[probe] stall round ${stalls}: ${capability} idle — ` +
+              `${group.cachedFiles}/${group.totalFiles} cached, ready=${group.ready}`,
+          );
+        } else {
+          debugLog(`[probe] stall round ${stalls}: /cache/status unreachable`);
+        }
       }
     }
 
     const result = { ...localUrls };
+    if (missing.size > 0) {
+      // The retry budget ran out (or a real miss): these files come from the
+      // configured remote host instead — where a cross-origin fetch may be
+      // COEP/CORS-blocked, which the binding surfaces as a load failure.
+      debugLog(
+        `[resolve] ${key}: giving up on ${[...missing].join(', ')} — ` +
+          `falling back to ${remote}`,
+      );
+    }
     missing.forEach((name) => {
       result[name] = `${remote}/${name}`;
     });
@@ -1974,6 +2043,11 @@ async function resolveModelUrls(key: ArchKey): Promise<Record<string, string>> {
     for (const [name, size] of localSizes) {
       if (size > 0) result[name] = `${local}/${name}?v=${size}`;
     }
+    // Show exactly what the binding will fetch, versioning included: cache
+    // keys in the binding's Cache API are exact URLs, so these lines are
+    // what the ?v=<size> stamping actually pins down.
+    debugLog(`[resolve] ${key}: URL map handed to the binding:`);
+    for (const [name, url] of Object.entries(result)) debugLog(`[resolve]   ${name} → ${url}`);
     const localCount = files.length - missing.size;
     if (localCount === files.length) {
       logEvent(t('log.modelFromLocal', { key, local }));
@@ -2030,8 +2104,17 @@ function buildMic(arch: Arch, languageCode: string): MicTranscriber {
     .modelArch(Moonshine.ModelArch[arch.name])
     .onText(onPartial)
     .onLine(onLine)
-    .onError((error) => setStatus(error.message, 'error'))
-    .onProgress((fraction) => setProgress(fraction));
+    .onError((error) => {
+      debugLog(`[binding] ${arch.key} transcriber error: ${error.message}`);
+      setStatus(error.message, 'error');
+    })
+    .onProgress((fraction) => {
+      // A load that jumps to 100% with no [probe] fetches alongside means
+      // the binding served stale bytes from its own browser-side model
+      // cache — the "thinks it's cached" symptom (see INITIALDOWNLOAD.txt).
+      debugLog(`[load] ${arch.key}: binding load progress ${(fraction * 100).toFixed(0)}%`);
+      setProgress(fraction);
+    });
 }
 
 async function loadModel(): Promise<void> {
@@ -2041,19 +2124,27 @@ async function loadModel(): Promise<void> {
   logEvent(t('log.modelLoading', { key: arch.key }));
   setProgress(null);
   const instance = buildMic(arch, moonshineLanguageCode());
-  instance.modelsFrom(await resolveModelUrls(arch.key));
+  debugLog(`[load] ${arch.key}: generation ${generation}, language ${moonshineLanguageCode()}`);
   try {
+    instance.modelsFrom(await resolveModelUrls(arch.key));
+    debugLog(`[load] ${arch.key}: binding load() starting`);
     await instance.load();
+    debugLog(`[load] ${arch.key}: binding load() succeeded`);
   } catch (err) {
+    console.error(`Model ${arch.key} load failed:`, err);
+    debugLog(`[load] ${arch.key} failed: ${(err as Error).stack ?? (err as Error).message}`);
     logEvent(t('log.modelLoadFailed', { key: arch.key, message: (err as Error).message }), 'error');
     // The binding serves its own browser-side cache hits without validating
     // them, so a stale or corrupt entry wedges every retry identically. Purge
     // it so the next attempt fetches fresh bytes from the server.
-    void purgeBindingModelCache();
+    void purgeBindingModelCache().then(() =>
+      debugLog(`[cache] purged binding model cache after ${arch.key} load failure`),
+    );
     throw err;
   }
   if (generation !== loadGeneration) {
     instance.close();
+    debugLog(`[load] ${arch.key} superseded by generation ${loadGeneration} — discarded`);
     return;
   }
   mic = instance;
@@ -2124,6 +2215,7 @@ async function ensureMicPermission(): Promise<void> {
 
 /** Warm-starts the model download as soon as the page loads. */
 function warmStart(): void {
+  debugLog(`[load] warm start for ${selectedArch}`);
   micReady = loadModel().catch((err: Error) => {
     setStatus(t('error.modelLoadFailed', { message: err.message }), 'error');
   });
@@ -2132,9 +2224,13 @@ function warmStart(): void {
 /** Loads the Moonshine binding; only failures are logged. */
 async function loadBinding(): Promise<MoonshineModule> {
   const url = loadModuleUrlPreference();
+  debugLog(`[binding] loading module from ${url}`);
   try {
-    return await loadMoonshine();
+    const module = await loadMoonshine();
+    debugLog(`[binding] module loaded from ${url}`);
+    return module;
   } catch (err) {
+    debugLog(`[binding] module load from ${url} failed: ${(err as Error).stack ?? (err as Error).message}`);
     logEvent(t('error.bindingLoadFailed', { url, message: (err as Error).message }), 'error');
     throw err;
   }
@@ -2379,6 +2475,7 @@ document.querySelectorAll<HTMLButtonElement>('.doc-event-btn').forEach((btn) => 
 // --- Startup --------------------------------------------------------------------------------
 
 void (async () => {
+  if (DEBUG_EVENTS) logFrame('sys', '[debug] ?debug=1 — extended diagnostic events enabled');
   try {
     Moonshine = await loadBinding();
   } catch {
