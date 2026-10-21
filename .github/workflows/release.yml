@@ -75,13 +75,23 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      # A tag like v1.2.3-beta.1 contains a dash, so treat it as a
+      # prerelease; plain versions (v1.2.3) become full releases.
       - name: Get version
         id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          if [[ "$VERSION" == *-* ]]; then
+            echo "PRERELEASE=true" >> $GITHUB_OUTPUT
+          else
+            echo "PRERELEASE=false" >> $GITHUB_OUTPUT
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
       - uses: softprops/action-gh-release@v2
         with:
           name: Release ${{ steps.get_version.outputs.VERSION }}
+          prerelease: ${{ steps.get_version.outputs.PRERELEASE == 'true' }}
           files: |
             artifacts/*
         env:
